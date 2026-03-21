@@ -98,9 +98,16 @@ export default function CaseFilePage({
 
   const isLoadingTitle = needsAnalysis && !streamState.title;
 
+  const isAnalyzing = streamState.status === "streaming";
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#050505]">
       <CaseFilesTopBar contract={contract} isLoadingTitle={isLoadingTitle} />
+
+      {/* Progress bar */}
+      <div className={`h-[2px] w-full shrink-0 overflow-hidden transition-opacity duration-500 ${isAnalyzing ? "opacity-100" : "opacity-0"}`}>
+        <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-white/80" />
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Document viewer — always has text, highlights appear as clauses arrive */}
