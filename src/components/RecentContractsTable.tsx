@@ -44,7 +44,7 @@ export default function RecentContractsTable({ contracts, loaded, onDemoClick }:
   const showDemoRows = !hasRealContracts && loaded;
 
   return (
-    <div className="flex-1">
+    <div className="min-w-0 flex-1">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Recent Contracts</h2>
         <span className="text-xs text-[#5C5C5C]">Last 30 Days</span>
