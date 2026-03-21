@@ -39,6 +39,15 @@ export default function CaseFilePage({
       retryKey
     );
 
+  // When AI title arrives, update the contract name
+  useEffect(() => {
+    if (streamState.title && contract && contract.analysis === null) {
+      const updated = { ...contract, name: streamState.title };
+      setContract(updated);
+      saveContract(updated);
+    }
+  }, [streamState.title]);
+
   // When streaming completes, persist the analysis to the contract
   useEffect(() => {
     if (streamedAnalysis && contract && !contract.analysis) {
@@ -87,9 +96,11 @@ export default function CaseFilePage({
     ? contract.analysis.clauses
     : streamState.clauses;
 
+  const isLoadingTitle = needsAnalysis && !streamState.title;
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#050505]">
-      <CaseFilesTopBar contract={contract} />
+      <CaseFilesTopBar contract={contract} isLoadingTitle={isLoadingTitle} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Document viewer — always has text, highlights appear as clauses arrive */}
@@ -99,6 +110,7 @@ export default function CaseFilePage({
             clauses={displayClauses}
             activeClauseId={activeClauseId}
             onClauseClick={handleClauseClick}
+            isLoadingTitle={isLoadingTitle}
           />
         </div>
 

@@ -8,6 +8,7 @@ interface CaseFileDocViewerProps {
   clauses: Clause[];
   activeClauseId: string | null;
   onClauseClick: (clauseId: string) => void;
+  isLoadingTitle?: boolean;
 }
 
 interface TextSegment {
@@ -21,6 +22,7 @@ export default function CaseFileDocViewer({
   clauses,
   activeClauseId,
   onClauseClick,
+  isLoadingTitle,
 }: CaseFileDocViewerProps) {
   const text = contract.rawText;
 
@@ -113,7 +115,7 @@ export default function CaseFileDocViewer({
         return (
           <h3
             key={i}
-            className="mb-4 mt-10 text-sm font-bold uppercase tracking-wide text-[#F1F1F3]"
+            className="mb-4 mt-10 text-sm font-bold uppercase tracking-wide text-[#FFFFFF]"
           >
             {trimmed}
           </h3>
@@ -131,10 +133,10 @@ export default function CaseFileDocViewer({
             return (
               <p
                 key={i}
-                className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+                className="mb-4 text-base leading-[1.8] text-[#cccccc]"
                 style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
               >
-                <em className="text-[#F1F1F3]">{prefix}{title}</em>{" "}
+                <em className="text-[#FFFFFF]">{prefix}{title}</em>{" "}
                 {body}
               </p>
             );
@@ -142,10 +144,10 @@ export default function CaseFileDocViewer({
           return (
             <p
               key={i}
-              className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+              className="mb-4 text-base leading-[1.8] text-[#cccccc]"
               style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
             >
-              <em className="text-[#F1F1F3]">{trimmed}</em>
+              <em className="text-[#FFFFFF]">{trimmed}</em>
             </p>
           );
         }
@@ -154,7 +156,7 @@ export default function CaseFileDocViewer({
       return (
         <p
           key={i}
-          className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+          className="mb-4 text-base leading-[1.8] text-[#cccccc]"
           style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
         >
           {trimmed}
@@ -180,15 +182,24 @@ export default function CaseFileDocViewer({
     <div className="h-full overflow-y-auto">
       {/* Document header */}
       <div className="border-b border-[rgba(255,255,255,0.06)] px-12 pt-10 pb-8">
-        <h1
-          className="text-4xl font-normal leading-tight text-[#F1F1F3]"
-          style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
-        >
-          {displayName}
-        </h1>
-        <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#5A5F6B]">
-          Draft Revision 4.2
-        </p>
+        {isLoadingTitle ? (
+          <>
+            <div className="h-10 w-3/4 animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+            <div className="mt-3 h-3 w-32 animate-pulse rounded bg-[rgba(255,255,255,0.04)]" />
+          </>
+        ) : (
+          <>
+            <h1
+              className="text-4xl font-normal leading-tight text-[#FFFFFF]"
+              style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+            >
+              {displayName}
+            </h1>
+            <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#5C5C5C]">
+              Draft Revision 4.2
+            </p>
+          </>
+        )}
       </div>
 
       {/* Document body */}
@@ -202,7 +213,7 @@ export default function CaseFileDocViewer({
                 id={`clause-text-${segment.clauseId}`}
                 className={`my-2 cursor-pointer rounded-r-lg border-l-3 pl-5 py-2 transition-all duration-200 ${
                   borderColors[segment.severity!]
-                } ${isActive ? "ring-1 ring-[rgba(59,130,246,0.3)]" : ""}`}
+                } ${isActive ? "ring-1 ring-[rgba(240,235,227,0.3)]" : ""}`}
                 onClick={() => onClauseClick(segment.clauseId!)}
               >
                 {renderText(segment.text)}

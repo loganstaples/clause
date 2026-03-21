@@ -6,6 +6,8 @@ import { ContractAnalysis, Clause } from "./types";
 interface StreamingState {
   /** null = not started, "streaming" = in progress, "done" = complete, "error" = failed */
   status: null | "streaming" | "done" | "error";
+  /** AI-generated title arrives early */
+  title: string | null;
   /** Header fields arrive first */
   header: {
     riskScore: number;
@@ -28,6 +30,7 @@ export function useStreamingAnalysis(
 } {
   const [state, setState] = useState<StreamingState>({
     status: null,
+    title: null,
     header: null,
     clauses: [],
     error: null,
@@ -36,7 +39,7 @@ export function useStreamingAnalysis(
   useEffect(() => {
     if (!shouldStream || !contractText) return;
 
-    setState({ status: "streaming", header: null, clauses: [], error: null });
+    setState({ status: "streaming", title: null, header: null, clauses: [], error: null });
 
     const abortController = new AbortController();
 
@@ -73,7 +76,9 @@ export function useStreamingAnalysis(
             } else if (line.startsWith("data: ")) {
               const data = JSON.parse(line.slice(6));
 
-              if (eventType === "header") {
+              if (eventType === "title") {
+                setState((prev) => ({ ...prev, title: data.title }));
+              } else if (eventType === "header") {
                 setState((prev) => ({ ...prev, header: data }));
               } else if (eventType === "clause") {
                 setState((prev) => ({

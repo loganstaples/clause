@@ -64,6 +64,19 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // Fire title generation and analysis in parallel
+        const titlePromise = client.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 50,
+          messages: [
+            {
+              role: "user",
+              content: `Read this contract and return ONLY a short, professional title for it (e.g. "Commercial Office Lease Agreement" or "Master Services Agreement — Acme Corp"). No quotes, no explanation, just the title.\n\n${text.slice(0, 2000)}`,
+            },
+          ],
+        });
+
+        // Start analysis stream
         let fullText = "";
         const claudeStream = client.messages.stream({
           model: "claude-haiku-4-5-20251001",
@@ -74,6 +87,20 @@ export async function POST(req: NextRequest) {
           ],
         });
 
+        // Emit title as soon as it arrives (runs in parallel with analysis)
+        titlePromise.then((titleRes) => {
+          const title = titleRes.content[0].type === "text"
+            ? titleRes.content[0].text.trim().replace(/^["']|["']$/g, "")
+            : "";
+          if (title) {
+            controller.enqueue(
+              encoder.encode(`event: title\ndata: ${JSON.stringify({ title })}\n\n`)
+            );
+          }
+        }).catch(() => {
+          // Title generation failed — not critical, skip silently
+        });
+
         for await (const event of claudeStream) {
           if (
             event.type === "content_block_delta" &&
@@ -82,6 +109,9 @@ export async function POST(req: NextRequest) {
             fullText += event.delta.text;
           }
         }
+
+        // Wait for title to finish before parsing analysis (in case it hasn't yet)
+        await titlePromise.catch(() => {});
 
         let analysis;
         try {
