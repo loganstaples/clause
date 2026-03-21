@@ -78,6 +78,11 @@ export async function POST(req: NextRequest) {
 
         // Start analysis stream
         let fullText = "";
+        let headerEmitted = false;
+        let inClausesArray = false;
+        let braceDepth = 0;
+        let clauseStart = -1;
+
         const claudeStream = client.messages.stream({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 16384,
@@ -97,9 +102,7 @@ export async function POST(req: NextRequest) {
               encoder.encode(`event: title\ndata: ${JSON.stringify({ title })}\n\n`)
             );
           }
-        }).catch(() => {
-          // Title generation failed — not critical, skip silently
-        });
+        }).catch(() => {});
 
         for await (const event of claudeStream) {
           if (
@@ -107,44 +110,97 @@ export async function POST(req: NextRequest) {
             event.delta.type === "text_delta"
           ) {
             fullText += event.delta.text;
+
+            // Try to emit header as soon as we see "clauses" key
+            if (!headerEmitted && fullText.includes('"clauses"')) {
+              try {
+                // Extract header by closing the object early
+                const headerJson = fullText.slice(0, fullText.indexOf('"clauses"')) + '"clauses":[]}';
+                const parsed = JSON.parse(headerJson);
+                controller.enqueue(
+                  encoder.encode(`event: header\ndata: ${JSON.stringify({
+                    riskScore: parsed.riskScore,
+                    summary: parsed.summary,
+                    counts: parsed.counts,
+                  })}\n\n`)
+                );
+                headerEmitted = true;
+              } catch {
+                // Header not yet parseable, keep buffering
+              }
+            }
+
+            // Incremental clause detection: track brace depth inside the clauses array
+            if (headerEmitted) {
+              const clausesIdx = fullText.indexOf('"clauses"');
+              const arrayStart = fullText.indexOf('[', clausesIdx);
+              if (arrayStart !== -1) {
+                // Scan only newly added characters for efficiency
+                const scanFrom = Math.max(
+                  arrayStart + 1,
+                  fullText.length - event.delta.text.length
+                );
+                for (let i = scanFrom; i < fullText.length; i++) {
+                  const ch = fullText[i];
+                  // Skip characters inside strings
+                  if (ch === '"') {
+                    // Fast-forward past string content
+                    i++;
+                    while (i < fullText.length && fullText[i] !== '"') {
+                      if (fullText[i] === '\\') i++; // skip escaped char
+                      i++;
+                    }
+                    continue;
+                  }
+                  if (ch === '{') {
+                    if (braceDepth === 0) clauseStart = i;
+                    braceDepth++;
+                  } else if (ch === '}') {
+                    braceDepth--;
+                    if (braceDepth === 0 && clauseStart !== -1) {
+                      // Complete clause object found
+                      const clauseJson = fullText.slice(clauseStart, i + 1);
+                      try {
+                        const clause = JSON.parse(clauseJson);
+                        controller.enqueue(
+                          encoder.encode(`event: clause\ndata: ${JSON.stringify(clause)}\n\n`)
+                        );
+                      } catch {
+                        // Malformed clause, skip
+                      }
+                      clauseStart = -1;
+                    }
+                  }
+                }
+              }
+            }
           }
         }
 
-        // Wait for title to finish before parsing analysis (in case it hasn't yet)
+        // Wait for title to finish
         await titlePromise.catch(() => {});
 
-        let analysis;
-        try {
-          analysis = JSON.parse(fullText);
-        } catch {
+        // If header was never emitted (short response), try full parse as fallback
+        if (!headerEmitted) {
+          let analysis;
           try {
-            const cleaned = fullText
-              .replace(/```json\s*/g, "")
-              .replace(/```\s*/g, "")
-              .trim();
-            analysis = JSON.parse(cleaned);
+            analysis = JSON.parse(fullText);
           } catch {
-            console.error("Failed to parse analysis JSON. Response preview:", fullText.slice(0, 500));
-            throw new Error(
-              `Invalid JSON from Claude. Response starts with: "${fullText.slice(0, 100)}..."`
+            const cleaned = fullText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+            analysis = JSON.parse(cleaned);
+          }
+          controller.enqueue(
+            encoder.encode(`event: header\ndata: ${JSON.stringify({
+              riskScore: analysis.riskScore,
+              summary: analysis.summary,
+              counts: analysis.counts,
+            })}\n\n`)
+          );
+          for (const clause of analysis.clauses) {
+            controller.enqueue(
+              encoder.encode(`event: clause\ndata: ${JSON.stringify(clause)}\n\n`)
             );
           }
-        }
-
-        const header = {
-          riskScore: analysis.riskScore,
-          summary: analysis.summary,
-          counts: analysis.counts,
-        };
-        controller.enqueue(
-          encoder.encode(`event: header\ndata: ${JSON.stringify(header)}\n\n`)
-        );
-
-        for (const clause of analysis.clauses) {
-          await new Promise((r) => setTimeout(r, 50));
-          controller.enqueue(
-            encoder.encode(`event: clause\ndata: ${JSON.stringify(clause)}\n\n`)
-          );
         }
 
         controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
