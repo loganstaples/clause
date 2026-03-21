@@ -45,7 +45,8 @@ export default function CaseFileDocViewer({
         const searchEnd = Math.min(text.length, idx + normalizedOriginal.length + 50);
         const searchRegion = text.substring(searchStart, searchEnd);
 
-        const firstWords = clause.originalText.split(/\s+/).slice(0, 5).join("\\s+");
+        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const firstWords = clause.originalText.split(/\s+/).slice(0, 5).map(escapeRegex).join("\\s+");
         const regex = new RegExp(firstWords, "i");
         const match = searchRegion.match(regex);
 
@@ -53,7 +54,7 @@ export default function CaseFileDocViewer({
           const actualStart = searchStart + match.index;
           const actualEnd = Math.min(text.length, actualStart + clause.originalText.length + 20);
 
-          const lastWords = clause.originalText.split(/\s+/).slice(-5).join("\\s+");
+          const lastWords = clause.originalText.split(/\s+/).slice(-5).map(escapeRegex).join("\\s+");
           const endRegex = new RegExp(lastWords, "i");
           const endRegion = text.substring(actualStart, actualEnd + 100);
           const endMatch = endRegion.match(endRegex);
