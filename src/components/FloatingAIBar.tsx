@@ -320,9 +320,11 @@ export default function FloatingAIBar({
   return (
     <div
       ref={panelRef}
-      className="fixed bottom-6 left-0 right-0 z-50 mx-auto"
+      className="fixed bottom-6 z-50"
       style={{
         width: isFocused || isExpanded || isStreaming ? "min(720px, 90vw)" : "min(400px, 90vw)",
+        left: "50vw",
+        transform: "translateX(-50%)",
         transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
       }}
     >
