@@ -90,6 +90,10 @@ export default function CaseFilePage({
         <div className="w-[520px] shrink-0">
           <CaseFileAnalysisPanel
             analysis={contract.analysis}
+            streamingHeader={null}
+            streamingClauses={[]}
+            isStreaming={false}
+            error={null}
             activeClauseId={activeClauseId}
             onClauseClick={handleClauseClick}
           />

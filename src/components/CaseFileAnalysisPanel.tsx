@@ -6,7 +6,16 @@ import RiskGauge from "@/components/RiskGauge";
 import { ContractAnalysis, Clause } from "@/lib/types";
 
 interface CaseFileAnalysisPanelProps {
-  analysis: ContractAnalysis;
+  analysis: ContractAnalysis | null;
+  streamingHeader: {
+    riskScore: number;
+    summary: string;
+    counts: { critical: number; warning: number; info: number };
+  } | null;
+  streamingClauses: Clause[];
+  isStreaming: boolean;
+  error: string | null;
+  onRetry?: () => void;
   activeClauseId: string | null;
   onClauseClick: (clauseId: string) => void;
 }
@@ -83,7 +92,7 @@ function CaseFileClauseCard({
     <div
       id={`clause-card-${clause.id}`}
       className={`rounded-xl overflow-hidden transition-all duration-200 ${
-        isActive ? "ring-1 ring-[rgba(59,130,246,0.4)]" : ""
+        isActive ? "ring-1 ring-[rgba(240,235,227,0.4)]" : ""
       }`}
       style={{
         border: `1px solid ${style.borderColor}`,
@@ -111,31 +120,32 @@ function CaseFileClauseCard({
           </span>
 
           {/* Three-dot menu */}
-          <button
+          <div
+            role="button"
             onClick={(e) => e.stopPropagation()}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[#5A5F6B] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[#8A8F98]"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[#5C5C5C] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[#999999]"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="5" r="1.5" />
               <circle cx="12" cy="12" r="1.5" />
               <circle cx="12" cy="19" r="1.5" />
             </svg>
-          </button>
+          </div>
         </div>
 
         <h3
-          className="mt-3 text-xl font-semibold text-[#F1F1F3]"
+          className="mt-3 text-xl font-semibold text-[#FFFFFF]"
           style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
         >
           {clause.title}
         </h3>
 
-        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[#5A5F6B]">
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">
           {locationDisplay}
         </p>
 
         <p
-          className="mt-3 text-sm leading-relaxed text-[#8A8F98]"
+          className="mt-3 text-sm leading-relaxed text-[#999999]"
           style={{ fontStyle: "italic" }}
         >
           &ldquo;{clause.explanation}&rdquo;
@@ -157,15 +167,15 @@ function CaseFileClauseCard({
               {clause.severity !== "info" && (
                 <div className="mt-3 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-3.5">
                   <div className="mb-2 flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A8F98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
                       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                     </svg>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A8F98]">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#999999]">
                       Corporate Playbook
                     </span>
                   </div>
-                  <p className="text-sm leading-relaxed text-[#8A8F98]">
+                  <p className="text-sm leading-relaxed text-[#999999]">
                     {clause.corporateBenchmark}
                   </p>
                 </div>
@@ -174,12 +184,12 @@ function CaseFileClauseCard({
               {/* Recommended Language */}
               {clause.severity !== "info" && (
                 <div className="mt-4">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#5A5F6B]">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#5C5C5C]">
                     Recommended Language
                   </p>
-                  <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0A0A0F] px-4 py-3.5">
+                  <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#050505] px-4 py-3.5">
                     <p
-                      className="text-[13px] leading-relaxed text-[#c0c4cc]"
+                      className="text-[13px] leading-relaxed text-[#cccccc]"
                       style={{
                         fontFamily:
                           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -190,7 +200,7 @@ function CaseFileClauseCard({
                   </div>
                   <button
                     onClick={handleCopy}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#5A5F6B] transition-colors hover:text-[#8A8F98]"
+                    className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#5C5C5C] transition-colors hover:text-[#999999]"
                   >
                     {copied ? (
                       <>
@@ -219,57 +229,120 @@ function CaseFileClauseCard({
   );
 }
 
+function AnalysisSkeleton() {
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-[rgba(255,255,255,0.06)] px-6 py-6">
+        <div className="flex items-start gap-5">
+          <RiskGauge score={0} loading />
+          <div className="flex-1 pt-1 space-y-3">
+            <div className="flex gap-2">
+              <div className="h-6 w-20 animate-pulse rounded-md bg-[rgba(255,255,255,0.06)]" />
+              <div className="h-6 w-20 animate-pulse rounded-md bg-[rgba(255,255,255,0.06)]" />
+            </div>
+            <div className="h-4 w-full animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+            <div className="h-4 w-3/4 animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+          </div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex flex-col gap-5">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-xl border border-[rgba(255,255,255,0.06)] p-5"
+              style={{ animationDelay: `${i * 150}ms` }}
+            >
+              <div className="h-5 w-24 rounded-md bg-[rgba(255,255,255,0.06)]" />
+              <div className="mt-4 h-5 w-3/4 rounded bg-[rgba(255,255,255,0.06)]" />
+              <div className="mt-2 h-4 w-1/3 rounded bg-[rgba(255,255,255,0.06)]" />
+              <div className="mt-4 space-y-2">
+                <div className="h-3 w-full rounded bg-[rgba(255,255,255,0.04)]" />
+                <div className="h-3 w-5/6 rounded bg-[rgba(255,255,255,0.04)]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CaseFileAnalysisPanel({
   analysis,
+  streamingHeader,
+  streamingClauses,
+  isStreaming,
+  error,
+  onRetry,
   activeClauseId,
   onClauseClick,
 }: CaseFileAnalysisPanelProps) {
-  const sortedClauses = [...analysis.clauses].sort((a, b) => {
-    const order = { critical: 0, warning: 1, info: 2 };
-    return order[a.severity] - order[b.severity];
-  });
+  // Error state
+  if (error && !analysis) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+        </div>
+        <p className="text-sm text-[#999999]">Analysis failed. Please try again.</p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="rounded-lg bg-[rgba(255,255,255,0.06)] px-4 py-2 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[rgba(255,255,255,0.1)]"
+          >
+            Retry Analysis
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Full skeleton — no data yet
+  if (!analysis && !streamingHeader) {
+    return <AnalysisSkeleton />;
+  }
+
+  // Determine data source: completed analysis takes priority over streaming
+  const header = analysis
+    ? { riskScore: analysis.riskScore, summary: analysis.summary, counts: analysis.counts }
+    : streamingHeader!;
+  const displayClauses = analysis
+    ? [...analysis.clauses].sort((a, b) => {
+        const order = { critical: 0, warning: 1, info: 2 };
+        return order[a.severity] - order[b.severity];
+      })
+    : [...streamingClauses].sort((a, b) => {
+        const order = { critical: 0, warning: 1, info: 2 };
+        return order[a.severity] - order[b.severity];
+      });
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Risk overview header */}
       <div className="shrink-0 border-b border-[rgba(255,255,255,0.06)] px-6 py-6">
         <div className="flex items-start gap-5">
-          {/* Risk gauge */}
           <div className="shrink-0">
-            <RiskGauge score={analysis.riskScore} />
+            <RiskGauge score={header.riskScore} />
           </div>
-
-          {/* Badges + summary */}
           <div className="flex-1 pt-1">
             <div className="flex flex-wrap items-center gap-2">
-              {analysis.counts.critical > 0 && (
-                <SeverityBadge
-                  count={analysis.counts.critical}
-                  label="Critical"
-                  color="#EF4444"
-                  bg="rgba(239, 68, 68, 0.1)"
-                />
+              {header.counts.critical > 0 && (
+                <SeverityBadge count={header.counts.critical} label="Critical" color="#EF4444" bg="rgba(239, 68, 68, 0.1)" />
               )}
-              {analysis.counts.warning > 0 && (
-                <SeverityBadge
-                  count={analysis.counts.warning}
-                  label="Warning"
-                  color="#F59E0B"
-                  bg="rgba(245, 158, 11, 0.1)"
-                />
+              {header.counts.warning > 0 && (
+                <SeverityBadge count={header.counts.warning} label="Warning" color="#F59E0B" bg="rgba(245, 158, 11, 0.1)" />
               )}
-              {analysis.counts.info > 0 && (
-                <SeverityBadge
-                  count={analysis.counts.info}
-                  label="Standard"
-                  color="#22C55E"
-                  bg="rgba(34, 197, 94, 0.1)"
-                />
+              {header.counts.info > 0 && (
+                <SeverityBadge count={header.counts.info} label="Standard" color="#22C55E" bg="rgba(34, 197, 94, 0.1)" />
               )}
             </div>
-
-            <p className="mt-3 text-sm leading-relaxed text-[#8A8F98]">
-              {analysis.summary}
+            <p className="mt-3 text-sm leading-relaxed text-[#999999]">
+              {header.summary}
             </p>
           </div>
         </div>
@@ -278,14 +351,30 @@ export default function CaseFileAnalysisPanel({
       {/* Clause cards */}
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="flex flex-col gap-5">
-          {sortedClauses.map((clause) => (
-            <CaseFileClauseCard
-              key={clause.id}
-              clause={clause}
-              isActive={clause.id === activeClauseId}
-              onClick={() => onClauseClick(clause.id)}
-            />
-          ))}
+          <AnimatePresence mode="popLayout">
+            {displayClauses.map((clause) => (
+              <motion.div
+                key={clause.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+              >
+                <CaseFileClauseCard
+                  clause={clause}
+                  isActive={clause.id === activeClauseId}
+                  onClick={() => onClauseClick(clause.id)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Streaming indicator */}
+          {isStreaming && (
+            <div className="flex items-center justify-center gap-2 py-4">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#999999]" />
+              <span className="text-xs text-[#5C5C5C]">Analyzing clauses...</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
