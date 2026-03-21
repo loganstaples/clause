@@ -117,11 +117,18 @@ export async function POST(req: NextRequest) {
         try {
           analysis = JSON.parse(fullText);
         } catch {
-          const cleaned = fullText
-            .replace(/```json\s*/g, "")
-            .replace(/```\s*/g, "")
-            .trim();
-          analysis = JSON.parse(cleaned);
+          try {
+            const cleaned = fullText
+              .replace(/```json\s*/g, "")
+              .replace(/```\s*/g, "")
+              .trim();
+            analysis = JSON.parse(cleaned);
+          } catch {
+            console.error("Failed to parse analysis JSON. Response preview:", fullText.slice(0, 500));
+            throw new Error(
+              `Invalid JSON from Claude. Response starts with: "${fullText.slice(0, 100)}..."`
+            );
+          }
         }
 
         const header = {

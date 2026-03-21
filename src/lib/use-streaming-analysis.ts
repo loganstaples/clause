@@ -73,26 +73,30 @@ export function useStreamingAnalysis(
           for (const line of lines) {
             if (line.startsWith("event: ")) {
               eventType = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
+            } else if (line.startsWith("data: ") && eventType) {
+              try {
+                const data = JSON.parse(line.slice(6));
 
-              if (eventType === "title") {
-                setState((prev) => ({ ...prev, title: data.title }));
-              } else if (eventType === "header") {
-                setState((prev) => ({ ...prev, header: data }));
-              } else if (eventType === "clause") {
-                setState((prev) => ({
-                  ...prev,
-                  clauses: [...prev.clauses, data as Clause],
-                }));
-              } else if (eventType === "done") {
-                setState((prev) => ({ ...prev, status: "done" }));
-              } else if (eventType === "error") {
-                setState((prev) => ({
-                  ...prev,
-                  status: "error",
-                  error: data.message,
-                }));
+                if (eventType === "title") {
+                  setState((prev) => ({ ...prev, title: data.title }));
+                } else if (eventType === "header") {
+                  setState((prev) => ({ ...prev, header: data }));
+                } else if (eventType === "clause") {
+                  setState((prev) => ({
+                    ...prev,
+                    clauses: [...prev.clauses, data as Clause],
+                  }));
+                } else if (eventType === "done") {
+                  setState((prev) => ({ ...prev, status: "done" }));
+                } else if (eventType === "error") {
+                  setState((prev) => ({
+                    ...prev,
+                    status: "error",
+                    error: data.message,
+                  }));
+                }
+              } catch {
+                // Skip malformed SSE data lines
               }
               eventType = "";
             }
