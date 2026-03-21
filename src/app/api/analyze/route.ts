@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
@@ -41,50 +41,92 @@ Return your response as valid JSON matching this exact schema:
 Respond with ONLY the JSON object. No preamble, no markdown, no backticks.`;
 
 export async function POST(req: NextRequest) {
-  try {
-    const { text } = await req.json();
+  const { text } = await req.json();
 
-    if (!text) {
-      return NextResponse.json(
-        { error: "No contract text provided" },
-        { status: 400 }
-      );
-    }
-
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Please analyze this contract:\n\n${text}`,
+  if (!text) {
+    return new Response(
+      `event: error\ndata: ${JSON.stringify({ message: "No contract text provided" })}\n\n`,
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
         },
-      ],
-    });
-
-    const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
-
-    // Try to parse JSON, with fallback for markdown-wrapped responses
-    let analysis;
-    try {
-      analysis = JSON.parse(responseText);
-    } catch {
-      // Try stripping markdown code blocks
-      const cleaned = responseText
-        .replace(/```json\s*/g, "")
-        .replace(/```\s*/g, "")
-        .trim();
-      analysis = JSON.parse(cleaned);
-    }
-
-    return NextResponse.json(analysis);
-  } catch (error) {
-    console.error("Analysis error:", error);
-    return NextResponse.json(
-      { error: "Failed to analyze contract" },
-      { status: 500 }
+      }
     );
   }
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        let fullText = "";
+        const claudeStream = client.messages.stream({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          messages: [
+            { role: "user", content: `Please analyze this contract:\n\n${text}` },
+          ],
+        });
+
+        for await (const event of claudeStream) {
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            fullText += event.delta.text;
+          }
+        }
+
+        let analysis;
+        try {
+          analysis = JSON.parse(fullText);
+        } catch {
+          const cleaned = fullText
+            .replace(/```json\s*/g, "")
+            .replace(/```\s*/g, "")
+            .trim();
+          analysis = JSON.parse(cleaned);
+        }
+
+        const header = {
+          riskScore: analysis.riskScore,
+          summary: analysis.summary,
+          counts: analysis.counts,
+        };
+        controller.enqueue(
+          encoder.encode(`event: header\ndata: ${JSON.stringify(header)}\n\n`)
+        );
+
+        for (const clause of analysis.clauses) {
+          await new Promise((r) => setTimeout(r, 50));
+          controller.enqueue(
+            encoder.encode(`event: clause\ndata: ${JSON.stringify(clause)}\n\n`)
+          );
+        }
+
+        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
+      } catch (error) {
+        console.error("Analysis streaming error:", error);
+        controller.enqueue(
+          encoder.encode(
+            `event: error\ndata: ${JSON.stringify({ message: "Failed to analyze contract" })}\n\n`
+          )
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
