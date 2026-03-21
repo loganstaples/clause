@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
 import CaseFilesTopBar from "@/components/CaseFilesTopBar";
 import CaseFileDocViewer from "@/components/CaseFileDocViewer";
 import CaseFileAnalysisPanel from "@/components/CaseFileAnalysisPanel";
@@ -57,39 +56,35 @@ export default function CaseFilePage({
 
   if (!contract) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0F]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#3B82F6]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+    <div className="flex h-screen flex-col overflow-hidden bg-[#0A0A0F]">
+      <CaseFilesTopBar contract={contract} />
 
-      <div className="ml-[220px] flex h-full flex-1 flex-col overflow-hidden">
-        <CaseFilesTopBar />
+      {/* Two-panel layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Document viewer */}
+        <div className="flex-1 overflow-hidden border-r border-[rgba(255,255,255,0.06)]">
+          <CaseFileDocViewer
+            contract={contract}
+            clauses={contract.analysis.clauses}
+            activeClauseId={activeClauseId}
+            onClauseClick={handleClauseClick}
+          />
+        </div>
 
-        {/* Two-panel layout */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Document viewer */}
-          <div className="flex-1 overflow-hidden border-r border-[rgba(255,255,255,0.06)] bg-[#0A0A0F]">
-            <CaseFileDocViewer
-              contract={contract}
-              clauses={contract.analysis.clauses}
-              activeClauseId={activeClauseId}
-              onClauseClick={handleClauseClick}
-            />
-          </div>
-
-          {/* Analysis panel */}
-          <div className="w-[420px] shrink-0 bg-[#0A0A0F]">
-            <CaseFileAnalysisPanel
-              analysis={contract.analysis}
-              activeClauseId={activeClauseId}
-              onClauseClick={handleClauseClick}
-            />
-          </div>
+        {/* Analysis panel */}
+        <div className="w-[520px] shrink-0">
+          <CaseFileAnalysisPanel
+            analysis={contract.analysis}
+            activeClauseId={activeClauseId}
+            onClauseClick={handleClauseClick}
+          />
         </div>
       </div>
 

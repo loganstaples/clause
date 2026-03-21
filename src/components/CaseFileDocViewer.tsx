@@ -16,17 +16,6 @@ interface TextSegment {
   severity: "critical" | "warning" | "info" | null;
 }
 
-function timeAgo(date: string): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days !== 1 ? "s" : ""} ago`;
-}
-
 export default function CaseFileDocViewer({
   contract,
   clauses,
@@ -115,7 +104,9 @@ export default function CaseFileDocViewer({
         /^ARTICLE\s+\d/i.test(trimmed) ||
         (trimmed === trimmed.toUpperCase() && trimmed.length < 100 && !trimmed.includes("."));
 
-      const isSectionHeader = /^\d+\.\s+[A-Z]/.test(trimmed);
+      // Detect section headers like "Section 2.0: Indemnification"
+      const isSectionHeader = /^\d+\.\d+\s+[A-Z]/.test(trimmed) || /^Section\s+\d/i.test(trimmed);
+      const isNumberedSection = /^\d+\.\s+[A-Z]/.test(trimmed);
 
       if (isHeading) {
         return (
@@ -128,22 +119,34 @@ export default function CaseFileDocViewer({
         );
       }
 
-      if (isSectionHeader) {
-        // Split section number from rest
-        const match = trimmed.match(/^(\d+\.\s*)(.+)/);
+      if (isSectionHeader || isNumberedSection) {
+        const match = trimmed.match(/^((?:\d+\.\d*\s*|Section\s+[\d.]+[:\s]*))(.+)/i);
         if (match) {
-          const [, num, rest] = match;
-          // Check if there's a bold portion (period after title)
+          const [, prefix, rest] = match;
+          // Check for "Title. Body" pattern
           const titleMatch = rest.match(/^([^.]+\.)\s*([\s\S]*)/);
           if (titleMatch) {
             const [, title, body] = titleMatch;
             return (
-              <p key={i} className="mb-4 text-base leading-[1.8] text-[#c0c4cc]" style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
-                {num}<strong className="font-bold text-[#F1F1F3]">{title}</strong>{" "}
+              <p
+                key={i}
+                className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+                style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+              >
+                <em className="text-[#F1F1F3]">{prefix}{title}</em>{" "}
                 {body}
               </p>
             );
           }
+          return (
+            <p
+              key={i}
+              className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+              style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+            >
+              <em className="text-[#F1F1F3]">{trimmed}</em>
+            </p>
+          );
         }
       }
 
@@ -165,31 +168,30 @@ export default function CaseFileDocViewer({
     info: "border-l-[#22C55E] bg-[rgba(34,197,94,0.03)]",
   };
 
+  // Derive clean display name
+  const displayName = contract.name
+    .replace(/_/g, " ")
+    .replace(/\s*v\d+$/i, "")
+    .replace(/—.*$/, "")
+    .trim();
+
   return (
     <div className="h-full overflow-y-auto">
       {/* Document header */}
-      <div className="border-b border-[rgba(255,255,255,0.06)] px-10 pt-8 pb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#5A5F6B]">
-          Internal Review v2.4
-        </p>
+      <div className="border-b border-[rgba(255,255,255,0.06)] px-12 pt-10 pb-8">
         <h1
-          className="mt-4 text-4xl font-normal leading-tight text-[#F1F1F3]"
+          className="text-4xl font-normal leading-tight text-[#F1F1F3]"
           style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
         >
-          {contract.name.replace(/_/g, " ").replace(/\s*v\d+$/i, "")}
+          {displayName}
         </h1>
-        <div className="mt-5 flex items-center gap-3">
-          <span className="rounded-md bg-[rgba(255,255,255,0.06)] px-3 py-1 text-xs font-medium text-[#8A8F98]">
-            Draft Stage
-          </span>
-          <span className="text-xs text-[#5A5F6B]">
-            Last modified {timeAgo(contract.uploadedAt)}
-          </span>
-        </div>
+        <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#5A5F6B]">
+          Draft Revision 4.2
+        </p>
       </div>
 
       {/* Document body */}
-      <div className="px-10 py-8 pb-40">
+      <div className="px-12 py-8 pb-40">
         {segments.map((segment, i) => {
           if (segment.clauseId) {
             const isActive = segment.clauseId === activeClauseId;
