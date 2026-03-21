@@ -56,14 +56,22 @@ export default function CaseFilePage({
 
   if (!contract) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0F]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#3B82F6]" />
+      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
+      </div>
+    );
+  }
+
+  if (!contract.analysis) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#0A0A0F]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#050505]">
       <CaseFilesTopBar contract={contract} />
 
       {/* Two-panel layout */}

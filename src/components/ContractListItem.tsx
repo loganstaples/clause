@@ -36,7 +36,7 @@ export default function ContractListItem({
     >
       <Link
         href={`/case-files/${contract.id}`}
-        className="flex items-center justify-between rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#12131A] px-5 py-4 transition-all duration-200 hover:border-[rgba(255,255,255,0.12)] hover:bg-[#151620]"
+        className="flex items-center justify-between rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#0E0E0E] px-5 py-4 transition-all duration-200 hover:border-[rgba(255,255,255,0.12)] hover:bg-[#131313]"
       >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(255,255,255,0.04)]">
@@ -45,7 +45,7 @@ export default function ContractListItem({
               height="20"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#5A5F6B"
+              stroke="#5C5C5C"
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -57,22 +57,22 @@ export default function ContractListItem({
             </svg>
           </div>
           <div>
-            <p className="text-sm font-medium text-[#F1F1F3]">
+            <p className="text-sm font-medium text-[#FFFFFF]">
               {contract.name}
             </p>
-            <p className="mt-0.5 text-xs text-[#5A5F6B]">
+            <p className="mt-0.5 text-xs text-[#5C5C5C]">
               {timeAgo(contract.uploadedAt)}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {analysis.counts.critical > 0 && (
+          {analysis && analysis.counts.critical > 0 && (
             <span className="flex items-center gap-1.5 rounded-full bg-[rgba(239,68,68,0.1)] px-2.5 py-1 text-xs font-medium text-[#EF4444]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
               {analysis.counts.critical} critical
             </span>
           )}
-          {analysis.counts.warning > 0 && (
+          {analysis && analysis.counts.warning > 0 && (
             <span className="flex items-center gap-1.5 rounded-full bg-[rgba(245,158,11,0.1)] px-2.5 py-1 text-xs font-medium text-[#F59E0B]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#F59E0B]" />
               {analysis.counts.warning} warning
@@ -83,7 +83,7 @@ export default function ContractListItem({
             height="16"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#5A5F6B"
+            stroke="#5C5C5C"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

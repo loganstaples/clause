@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
 import DocumentViewer from "@/components/DocumentViewer";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import FloatingAIBar from "@/components/FloatingAIBar";
@@ -32,7 +31,6 @@ export default function ReviewPage({
   const handleClauseClick = useCallback((clauseId: string) => {
     setActiveClauseId(clauseId);
 
-    // Scroll the corresponding element into view
     const cardEl = document.getElementById(`clause-card-${clauseId}`);
     const textEl = document.getElementById(`clause-text-${clauseId}`);
 
@@ -43,7 +41,6 @@ export default function ReviewPage({
       textEl.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
-    // Clear active state after a moment
     setTimeout(() => setActiveClauseId(null), 3000);
   }, []);
 
@@ -60,23 +57,58 @@ export default function ReviewPage({
   if (!contract) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#3B82F6]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
+      </div>
+    );
+  }
+
+  if (!contract.analysis) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
       </div>
     );
   }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[rgba(255,255,255,0.06)] bg-[#0A0A0F] px-4">
-        <div className="flex items-center gap-3">
+      {/* Top header bar */}
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.04] bg-[#0B0B0B] px-6">
+        <div className="flex items-center gap-4">
           <Link
             href="/"
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[#8A8F98] transition-colors hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F1F1F3]"
+            className="flex items-center justify-center rounded-full p-2 transition-colors hover:bg-white/[0.04]"
           >
             <svg
-              width="16"
-              height="16"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#F0EBE3"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </Link>
+          <span
+            className="text-xl font-bold tracking-tight text-[#FFFFFF]"
+            style={{ fontFamily: "var(--font-liberation-serif), serif" }}
+          >
+            Clause
+          </span>
+        </div>
+        <div className="hidden md:block">
+          <h1 className="text-xs font-medium uppercase tracking-[0.2em] text-[#999999]">
+            {contract.name}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-white/[0.04]">
+            <svg
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -84,36 +116,19 @@ export default function ReviewPage({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <polyline points="15 18 9 12 15 6" />
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
             </svg>
-            Back
-          </Link>
-          <div className="h-4 w-px bg-[rgba(255,255,255,0.08)]" />
-          <div className="flex items-center gap-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#5A5F6B"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-            <span className="text-sm font-medium text-[#F1F1F3]">
-              {contract.name}
-            </span>
-          </div>
+            Export
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* Two-panel layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <main className="flex flex-1 overflow-hidden">
         {/* Left panel — Document viewer */}
-        <div className="w-1/2 overflow-y-auto border-r border-[rgba(255,255,255,0.06)] bg-[#0A0A0F]">
+        <div className="w-full md:w-[45%] overflow-y-auto border-r border-white/[0.04] bg-[#080808] document-view">
           <DocumentViewer
             text={contract.rawText}
             clauses={contract.analysis.clauses}
@@ -123,17 +138,17 @@ export default function ReviewPage({
         </div>
 
         {/* Right panel — Analysis */}
-        <div className="w-1/2 bg-[#0A0A0F]">
+        <div className="w-full md:w-[55%] bg-[#0B0B0B]">
           <AnalysisPanel
             analysis={contract.analysis}
             activeClauseId={activeClauseId}
             onClauseClick={handleClauseClick}
           />
         </div>
-      </div>
+      </main>
 
       <FloatingAIBar
-        placeholder="Ask about this contract..."
+        placeholder="Ask Clause about this contract..."
         contractText={contract.rawText}
         chatHistory={contract.chatHistory}
         onChatUpdate={handleChatUpdate}
