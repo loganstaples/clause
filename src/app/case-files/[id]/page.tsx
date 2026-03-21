@@ -8,6 +8,7 @@ import CaseFileAnalysisPanel from "@/components/CaseFileAnalysisPanel";
 import FloatingAIBar from "@/components/FloatingAIBar";
 import { Contract, ChatMessage } from "@/lib/types";
 import { getContract, saveContract } from "@/lib/store";
+import { useStreamingAnalysis } from "@/lib/use-streaming-analysis";
 
 export default function CaseFilePage({
   params,
@@ -18,6 +19,7 @@ export default function CaseFilePage({
   const router = useRouter();
   const [contract, setContract] = useState<Contract | null>(null);
   const [activeClauseId, setActiveClauseId] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const c = getContract(id);
@@ -27,6 +29,24 @@ export default function CaseFilePage({
     }
     setContract(c);
   }, [id, router]);
+
+  // Stream analysis if contract has no analysis yet
+  const needsAnalysis = contract !== null && contract.analysis === null;
+  const { state: streamState, analysis: streamedAnalysis } =
+    useStreamingAnalysis(
+      needsAnalysis ? contract.rawText : null,
+      needsAnalysis,
+      retryKey
+    );
+
+  // When streaming completes, persist the analysis to the contract
+  useEffect(() => {
+    if (streamedAnalysis && contract && !contract.analysis) {
+      const updated = { ...contract, analysis: streamedAnalysis };
+      setContract(updated);
+      saveContract(updated);
+    }
+  }, [streamedAnalysis, contract]);
 
   const handleClauseClick = useCallback((clauseId: string) => {
     setActiveClauseId(clauseId);
@@ -62,38 +82,35 @@ export default function CaseFilePage({
     );
   }
 
-  if (!contract.analysis) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
-      </div>
-    );
-  }
+  // Determine what clauses to show — from completed analysis or from streaming
+  const displayClauses = contract.analysis
+    ? contract.analysis.clauses
+    : streamState.clauses;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#050505]">
       <CaseFilesTopBar contract={contract} />
 
-      {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Document viewer */}
+        {/* Document viewer — always has text, highlights appear as clauses arrive */}
         <div className="flex-1 overflow-hidden border-r border-[rgba(255,255,255,0.06)]">
           <CaseFileDocViewer
             contract={contract}
-            clauses={contract.analysis.clauses}
+            clauses={displayClauses}
             activeClauseId={activeClauseId}
             onClauseClick={handleClauseClick}
           />
         </div>
 
-        {/* Analysis panel */}
+        {/* Analysis panel — skeleton → header → clauses stream in */}
         <div className="w-[520px] shrink-0">
           <CaseFileAnalysisPanel
             analysis={contract.analysis}
-            streamingHeader={null}
-            streamingClauses={[]}
-            isStreaming={false}
-            error={null}
+            streamingHeader={streamState.header}
+            streamingClauses={streamState.clauses}
+            isStreaming={streamState.status === "streaming"}
+            error={streamState.error}
+            onRetry={() => setRetryKey((k) => k + 1)}
             activeClauseId={activeClauseId}
             onClauseClick={handleClauseClick}
           />
