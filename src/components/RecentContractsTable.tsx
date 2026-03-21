@@ -50,7 +50,7 @@ export default function RecentContractsTable({ contracts, loaded, onDemoClick }:
         <span className="text-xs text-[#5C5C5C]">Last 30 Days</span>
       </div>
 
-      <div className="rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
+      <div className="overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
         {/* Table header */}
         <div className="grid grid-cols-[1fr_120px_100px_50px] gap-4 border-b border-[rgba(255,255,255,0.08)] px-5 py-3">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Document Name</span>
@@ -69,7 +69,7 @@ export default function RecentContractsTable({ contracts, loaded, onDemoClick }:
                 href={`/case-files/${contract.id}`}
                 className="grid grid-cols-[1fr_120px_100px_50px] items-center gap-4 border-b border-[rgba(255,255,255,0.04)] px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.02)]"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(240,235,227,0.1)]">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
