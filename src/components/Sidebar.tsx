@@ -57,18 +57,15 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 z-30 flex h-full w-[220px] flex-col border-r border-[rgba(255,255,255,0.06)] bg-[#0A0A0F]">
+    <aside className="fixed left-0 top-0 z-30 flex h-full w-[220px] flex-col border-r border-[rgba(255,255,255,0.08)] bg-[#050505]">
       {/* Logo */}
       <div className="px-6 pt-6 pb-8">
         <Link href="/" className="flex flex-col">
           <span
-            className="text-xl font-normal tracking-tight text-[#F1F1F3]"
-            style={{ fontFamily: "var(--font-serif), serif", fontStyle: "italic" }}
+            className="text-3xl font-bold tracking-tight text-white"
+            style={{ fontFamily: "var(--font-liberation-serif), serif" }}
           >
             Clause
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#5A5F6B]">
-            Legal AI
           </span>
         </Link>
       </div>
@@ -85,11 +82,11 @@ export default function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? "bg-[#3B82F6] text-white"
-                  : "text-[#8A8F98] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#c0c4cc]"
+                  ? "bg-[#F0EBE3] text-[#050505]"
+                  : "text-[#999999] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#cccccc]"
               }`}
             >
-              <span className={isActive ? "text-white" : "text-[#5A5F6B]"}>
+              <span className={isActive ? "text-[#050505]" : "text-[#5C5C5C]"}>
                 {item.icon}
               </span>
               {item.label}
@@ -100,15 +97,15 @@ export default function Sidebar() {
 
       {/* Storage Usage */}
       <div className="mt-auto px-5 pb-6">
-        <div className="rounded-lg border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-3">
-          <p className="text-[11px] font-medium text-[#8A8F98]">Storage Usage</p>
+        <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] p-3">
+          <p className="text-[11px] font-medium text-[#999999]">Storage Usage</p>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
             <div
-              className="h-full rounded-full bg-[#3B82F6]"
+              className="h-full rounded-full bg-[#F0EBE3]"
               style={{ width: "64%" }}
             />
           </div>
-          <p className="mt-1.5 text-[10px] text-[#5A5F6B]">642.1 MB of 1 GB used</p>
+          <p className="mt-1.5 text-[10px] text-[#5C5C5C]">642.1 MB of 1 GB used</p>
         </div>
       </div>
     </aside>
