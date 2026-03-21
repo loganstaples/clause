@@ -23,10 +23,10 @@ const MODELS = [
 ] as const;
 
 const CONIC_GRADIENT =
-  "conic-gradient(from 0deg, #818cf8, #9b8afb, #a78bfa, #8ba8f8, #60bfe6, #22d3ee, #2bd4b0, #34d399, #7ac77a, #b8c456, #fbbf24, #f59064, #f87171, #e47ab4, #a78bfa, #818cf8)";
+  "conic-gradient(from 0deg, #F5F0E8, #FFFFFF, #F0EBE3, #FFFFFF, #F5F0E8, #FFFFFF, #F0EBE3, #FFFFFF, #F5F0E8)";
 
 const BAR_GLASS =
-  "linear-gradient(135deg, rgba(10, 11, 18, 0.96) 0%, rgba(14, 15, 22, 0.94) 100%)";
+  "linear-gradient(135deg, rgba(12, 12, 12, 0.96) 0%, rgba(18, 18, 18, 0.94) 100%)";
 
 export default function FloatingAIBar({
   placeholder = "Ask anything about contracts...",
@@ -38,7 +38,7 @@ export default function FloatingAIBar({
   const [isStreaming, setIsStreaming] = useState(false);
   const [borderState, setBorderState] = useState<BorderState>("idle");
   const [flashKey, setFlashKey] = useState(0);
-  const [selectedModel, setSelectedModel] = useState<string>(MODELS[1].id);
+  const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
@@ -51,6 +51,10 @@ export default function FloatingAIBar({
   // Whether the conic border should spin (during streaming)
   const [borderSpin, setBorderSpin] = useState(false);
   const [spinFlashKey, setSpinFlashKey] = useState(0);
+
+  // Typewriter state
+  const [visibleLength, setVisibleLength] = useState(0);
+  const lastScrollTime = useRef(0);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -68,12 +72,48 @@ export default function FloatingAIBar({
   const clearTimers = () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; };
   useEffect(() => () => clearTimers(), []);
 
-  // Auto-scroll content as answer streams
+  // Reset typewriter when answer is cleared (new question)
   useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-    }
+    if (answer === "") setVisibleLength(0);
   }, [answer]);
+
+  // Typewriter — smoothly reveal characters via RAF
+  useEffect(() => {
+    if (visibleLength >= answer.length) return;
+
+    const rafId = requestAnimationFrame(() => {
+      setVisibleLength((prev) => {
+        // Faster catchup after streaming ends
+        const step = isStreaming ? 3 : 10;
+        return Math.min(prev + step, answer.length);
+      });
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [visibleLength, answer.length, isStreaming]);
+
+  const displayedAnswer = answer.substring(0, visibleLength);
+  const isTypewriting = visibleLength < answer.length;
+
+  // Auto-scroll as content is revealed (throttled)
+  useEffect(() => {
+    if (!contentRef.current || visibleLength === 0) return;
+    const now = Date.now();
+    if (now - lastScrollTime.current > 150) {
+      lastScrollTime.current = now;
+      contentRef.current.scrollTo({ top: contentRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [visibleLength]);
+
+  // Auto-scroll when follow-ups appear
+  useEffect(() => {
+    if (!contentRef.current) return;
+    // Small delay to let the motion animation expand before scrolling
+    const timer = setTimeout(() => {
+      contentRef.current?.scrollTo({ top: contentRef.current.scrollHeight, behavior: "smooth" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [followups, followupsLoading]);
 
   // Close on Escape, open on /
   useEffect(() => {
@@ -124,7 +164,7 @@ export default function FloatingAIBar({
     if (wasOpen && !modelMenuOpen && !focusedRef.current && stateRef.current === "settled") {
       clearTimers();
       setBorderState("leaving");
-      timersRef.current.push(setTimeout(() => setBorderState("idle"), 1600));
+      timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
     }
   }, [modelMenuOpen]);
 
@@ -155,7 +195,7 @@ export default function FloatingAIBar({
       setTimeout(() => {
         if (modelMenuOpenRef.current) return;
         setBorderState("leaving");
-        timersRef.current.push(setTimeout(() => setBorderState("idle"), 1600));
+        timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
       }, 0)
     );
   }, [isStreaming]);
@@ -262,25 +302,29 @@ export default function FloatingAIBar({
   // Border opacity/animation
   const borderOpacity = (() => {
     if (borderSpin) return 0.85;
-    if (borderState === "settled") return 0.7;
+    if (borderState === "settled") return 0.55;
     if (borderState === "leaving") return 0;
     return 0;
   })();
 
   const borderTransition = borderState === "leaving"
-    ? "opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1)"
+    ? "opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1)"
     : "opacity 0.2s ease-in";
 
   const glowShadow = (() => {
-    if (borderSpin) return "0 0 30px rgba(129, 140, 248, 0.25), 0 0 80px rgba(167, 139, 250, 0.12)";
-    if (borderState === "settled") return "0 0 16px rgba(129, 140, 248, 0.15)";
+    if (borderSpin) return "0 0 30px rgba(232, 220, 200, 0.2), 0 0 80px rgba(212, 200, 176, 0.1)";
+    if (isExpanded) return "0 0 16px rgba(232, 220, 200, 0.12)";
     return "none";
   })();
 
   return (
     <div
       ref={panelRef}
-      className="fixed bottom-6 left-1/2 z-50 w-[min(720px,90vw)] -translate-x-1/2"
+      className="fixed bottom-6 left-0 right-0 z-50 mx-auto"
+      style={{
+        width: isFocused || isExpanded || isStreaming ? "min(720px, 90vw)" : "min(400px, 90vw)",
+        transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
     >
       {/* Single unified container — border wrapper */}
       <div
@@ -301,7 +345,7 @@ export default function FloatingAIBar({
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
           style={{
-            border: "1.5px solid rgba(255, 255, 255, 0.06)",
+            border: "1.5px solid rgba(255, 255, 255, 0.14)",
             opacity: borderState === "idle" && !borderSpin ? 1 : 0,
             transition: "opacity 0.5s ease",
           }}
@@ -315,7 +359,7 @@ export default function FloatingAIBar({
           {/* Inner glow */}
           <div
             className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-12 pointer-events-none rounded-t-[14px]"
-            style={{ background: "radial-gradient(ellipse at 50% -20%, rgba(129, 140, 248, 0.06) 0%, transparent 70%)" }}
+            style={{ background: "radial-gradient(ellipse at 50% -20%, rgba(232, 220, 200, 0.05) 0%, transparent 70%)" }}
           />
 
           {/* ===== EXPANDABLE CONTENT AREA — grows upward ===== */}
@@ -339,53 +383,53 @@ export default function FloatingAIBar({
                 >
                   {/* User question */}
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(129,140,248,0.15)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.15)]">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                       </svg>
                     </div>
-                    <p className="text-sm font-medium text-[#F1F1F3] leading-relaxed">{question}</p>
+                    <p className="text-sm font-medium text-white leading-relaxed">{question}</p>
                   </div>
 
                   <div className="h-px bg-[rgba(255,255,255,0.06)] mb-3" />
 
                   {/* AI answer */}
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(129,140,248,0.1)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.1)]">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                       </svg>
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 min-h-[120px]">
                       {answer ? (
-                        <div className="ai-markdown text-sm leading-[1.75] text-[#c0c4cc]">
+                        <div className="ai-markdown text-sm leading-[1.75] text-[#cccccc]">
                           <ReactMarkdown
                             components={{
                               p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold text-[#F1F1F3]">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-[#a0a4b0]">{children}</em>,
+                              strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                              em: ({ children }) => <em className="italic text-[#aaaaaa]">{children}</em>,
                               ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
                               ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
-                              li: ({ children }) => <li className="text-[#c0c4cc]">{children}</li>,
-                              h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-[#F1F1F3] first:mt-0">{children}</h1>,
-                              h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-[#F1F1F3] first:mt-0">{children}</h2>,
-                              h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-[#F1F1F3] first:mt-0">{children}</h3>,
+                              li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                              h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-white first:mt-0">{children}</h1>,
+                              h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-white first:mt-0">{children}</h2>,
+                              h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-white first:mt-0">{children}</h3>,
                               code: ({ children, className }) => {
                                 const isBlock = className?.includes("language-");
                                 if (isBlock) {
-                                  return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#c0c4cc] overflow-x-auto whitespace-pre">{children}</code>;
+                                  return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#cccccc] overflow-x-auto whitespace-pre">{children}</code>;
                                 }
-                                return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d8]">{children}</code>;
+                                return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d4]">{children}</code>;
                               },
                               pre: ({ children }) => <>{children}</>,
-                              blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(129,140,248,0.3)] pl-4 text-[#8A8F98] italic">{children}</blockquote>,
+                              blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(240,235,227,0.3)] pl-4 text-[#999999] italic">{children}</blockquote>,
                               hr: () => <hr className="my-4 border-[rgba(255,255,255,0.06)]" />,
-                              a: ({ children, href }) => <a href={href} className="text-[#818cf8] underline underline-offset-2 hover:text-[#a5b4fc]" target="_blank" rel="noopener noreferrer">{children}</a>,
+                              a: ({ children, href }) => <a href={href} className="text-[#F0EBE3] underline underline-offset-2 hover:text-[#F5EFE0]" target="_blank" rel="noopener noreferrer">{children}</a>,
                             }}
                           >
-                            {answer}
+                            {displayedAnswer}
                           </ReactMarkdown>
-                          {isStreaming && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#818cf8]" />}
+                          {(isStreaming || isTypewriting) && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#F0EBE3]" />}
                         </div>
                       ) : (
                         /* Skeleton — shown while waiting for first token */
@@ -414,15 +458,15 @@ export default function FloatingAIBar({
                         {followupsLoading ? (
                           <div className="flex items-center gap-2 py-1">
                             <div className="flex gap-1">
-                              <span className="h-1 w-1 rounded-full bg-[#5A5F6B] animate-pulse" />
-                              <span className="h-1 w-1 rounded-full bg-[#5A5F6B] animate-pulse" style={{ animationDelay: "150ms" }} />
-                              <span className="h-1 w-1 rounded-full bg-[#5A5F6B] animate-pulse" style={{ animationDelay: "300ms" }} />
+                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" />
+                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "150ms" }} />
+                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "300ms" }} />
                             </div>
-                            <span className="text-[11px] text-[#5A5F6B]">Generating follow-ups...</span>
+                            <span className="text-[11px] text-[#5C5C5C]">Generating follow-ups...</span>
                           </div>
                         ) : (
                           <div className="flex flex-col gap-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5A5F6B] mb-0.5">Follow up</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5C5C5C] mb-0.5">Follow up</span>
                             {followups.map((fu, i) => (
                               <motion.button
                                 key={i}
@@ -430,12 +474,12 @@ export default function FloatingAIBar({
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ duration: 0.2, delay: i * 0.07 }}
                                 onClick={() => handleFollowupClick(fu)}
-                                className="group flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(129,140,248,0.08)] hover:border-[rgba(129,140,248,0.2)]"
+                                className="group flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(240,235,227,0.08)] hover:border-[rgba(240,235,227,0.2)]"
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
                                   <polyline points="9 18 15 12 9 6" />
                                 </svg>
-                                <span className="text-[13px] text-[#8A8F98] group-hover:text-[#c0c4cc] transition-colors">{fu}</span>
+                                <span className="text-[13px] text-[#999999] group-hover:text-[#cccccc] transition-colors">{fu}</span>
                               </motion.button>
                             ))}
                           </div>
@@ -457,11 +501,11 @@ export default function FloatingAIBar({
             {isStreaming ? (
               <div className="py-0.5 flex items-center gap-2">
                 <div className="flex gap-1 shrink-0">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#818cf8] animate-pulse" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#818cf8] animate-pulse" style={{ animationDelay: "150ms" }} />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#818cf8] animate-pulse" style={{ animationDelay: "300ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "150ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "300ms" }} />
                 </div>
-                <span className="text-sm text-[#5A5F6B]">Generating response...</span>
+                <span className="text-sm text-[#5C5C5C]">Generating response...</span>
               </div>
             ) : (
               <textarea
@@ -489,7 +533,7 @@ export default function FloatingAIBar({
                 {isExpanded && !isStreaming && (
                   <button
                     onClick={() => setIsExpanded(false)}
-                    className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium text-[#5A5F6B] rounded-lg transition-colors hover:text-[#8A8F98] hover:bg-[rgba(255,255,255,0.04)]"
+                    className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium text-[#5C5C5C] rounded-lg transition-colors hover:text-[#999999] hover:bg-[rgba(255,255,255,0.04)]"
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="6 15 12 9 18 15" />
@@ -545,7 +589,7 @@ export default function FloatingAIBar({
                           <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.3)" }}>{m.desc}</span>
                         </div>
                         {selectedModel === m.id && (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(129, 140, 248, 0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="2 6 5 9 10 3" /></svg>
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(232, 220, 200, 0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="2 6 5 9 10 3" /></svg>
                         )}
                       </button>
                     ))}
@@ -558,9 +602,9 @@ export default function FloatingAIBar({
                   disabled={isStreaming || !hasInput}
                   className="flex-shrink-0 px-3.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
                   style={{
-                    background: hasInput && !isStreaming ? "rgba(255, 255, 255, 0.95)" : isFocused ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)",
-                    color: hasInput && !isStreaming ? "#0A0A0F" : isFocused ? "rgba(255, 255, 255, 0.68)" : "rgba(255, 255, 255, 0.25)",
-                    border: hasInput && !isStreaming ? "1px solid rgba(255, 255, 255, 0.9)" : isFocused ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid rgba(255, 255, 255, 0.08)",
+                    background: hasInput && !isStreaming ? "#F0EBE3" : isFocused ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)",
+                    color: hasInput && !isStreaming ? "#050505" : isFocused ? "rgba(255, 255, 255, 0.68)" : "rgba(255, 255, 255, 0.25)",
+                    border: hasInput && !isStreaming ? "1px solid #F0EBE3" : isFocused ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid rgba(255, 255, 255, 0.08)",
                   }}
                 >
                   {isStreaming ? "Thinking..." : "Ask"}

@@ -27,10 +27,19 @@ You are not a lawyer and cannot provide legal advice. You provide legal informat
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, contractText } = await req.json();
+    const { messages, contractText, model } = await req.json();
+
+    const ALLOWED_MODELS = [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-6",
+      "claude-opus-4-6",
+    ];
+    const chatModel = ALLOWED_MODELS.includes(model)
+      ? model
+      : "claude-haiku-4-5-20251001";
 
     const stream = await client.messages.stream({
-      model: "claude-sonnet-4-20250514",
+      model: chatModel,
       max_tokens: 2048,
       system: getSystemPrompt(contractText),
       messages: messages.map(
