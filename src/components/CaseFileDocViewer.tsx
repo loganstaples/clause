@@ -1,0 +1,214 @@
+"use client";
+
+import { useMemo } from "react";
+import { Clause, Contract } from "@/lib/types";
+
+interface CaseFileDocViewerProps {
+  contract: Contract;
+  clauses: Clause[];
+  activeClauseId: string | null;
+  onClauseClick: (clauseId: string) => void;
+}
+
+interface TextSegment {
+  text: string;
+  clauseId: string | null;
+  severity: "critical" | "warning" | "info" | null;
+}
+
+function timeAgo(date: string): string {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
+}
+
+export default function CaseFileDocViewer({
+  contract,
+  clauses,
+  activeClauseId,
+  onClauseClick,
+}: CaseFileDocViewerProps) {
+  const text = contract.rawText;
+
+  const segments = useMemo(() => {
+    const matches: Array<{
+      start: number;
+      end: number;
+      clauseId: string;
+      severity: "critical" | "warning" | "info";
+    }> = [];
+
+    for (const clause of clauses) {
+      const normalizedOriginal = clause.originalText
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+      const normalizedText = text.replace(/\s+/g, " ").toLowerCase();
+
+      const idx = normalizedText.indexOf(normalizedOriginal);
+      if (idx !== -1) {
+        const searchStart = Math.max(0, idx - 50);
+        const searchEnd = Math.min(text.length, idx + normalizedOriginal.length + 50);
+        const searchRegion = text.substring(searchStart, searchEnd);
+
+        const firstWords = clause.originalText.split(/\s+/).slice(0, 5).join("\\s+");
+        const regex = new RegExp(firstWords, "i");
+        const match = searchRegion.match(regex);
+
+        if (match && match.index !== undefined) {
+          const actualStart = searchStart + match.index;
+          const actualEnd = Math.min(text.length, actualStart + clause.originalText.length + 20);
+
+          const lastWords = clause.originalText.split(/\s+/).slice(-5).join("\\s+");
+          const endRegex = new RegExp(lastWords, "i");
+          const endRegion = text.substring(actualStart, actualEnd + 100);
+          const endMatch = endRegion.match(endRegex);
+
+          const finalEnd =
+            endMatch && endMatch.index !== undefined
+              ? actualStart + endMatch.index + endMatch[0].length
+              : actualEnd;
+
+          matches.push({
+            start: actualStart,
+            end: finalEnd,
+            clauseId: clause.id,
+            severity: clause.severity,
+          });
+        }
+      }
+    }
+
+    matches.sort((a, b) => a.start - b.start);
+
+    const result: TextSegment[] = [];
+    let currentPos = 0;
+
+    for (const match of matches) {
+      if (match.start > currentPos) {
+        result.push({ text: text.substring(currentPos, match.start), clauseId: null, severity: null });
+      }
+      if (match.start >= currentPos) {
+        result.push({ text: text.substring(match.start, match.end), clauseId: match.clauseId, severity: match.severity });
+        currentPos = match.end;
+      }
+    }
+
+    if (currentPos < text.length) {
+      result.push({ text: text.substring(currentPos), clauseId: null, severity: null });
+    }
+
+    return result;
+  }, [text, clauses]);
+
+  const renderText = (content: string) => {
+    return content.split("\n\n").map((paragraph, i) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return null;
+
+      const isHeading =
+        /^ARTICLE\s+\d/i.test(trimmed) ||
+        (trimmed === trimmed.toUpperCase() && trimmed.length < 100 && !trimmed.includes("."));
+
+      const isSectionHeader = /^\d+\.\s+[A-Z]/.test(trimmed);
+
+      if (isHeading) {
+        return (
+          <h3
+            key={i}
+            className="mb-4 mt-10 text-sm font-bold uppercase tracking-wide text-[#F1F1F3]"
+          >
+            {trimmed}
+          </h3>
+        );
+      }
+
+      if (isSectionHeader) {
+        // Split section number from rest
+        const match = trimmed.match(/^(\d+\.\s*)(.+)/);
+        if (match) {
+          const [, num, rest] = match;
+          // Check if there's a bold portion (period after title)
+          const titleMatch = rest.match(/^([^.]+\.)\s*([\s\S]*)/);
+          if (titleMatch) {
+            const [, title, body] = titleMatch;
+            return (
+              <p key={i} className="mb-4 text-base leading-[1.8] text-[#c0c4cc]" style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
+                {num}<strong className="font-bold text-[#F1F1F3]">{title}</strong>{" "}
+                {body}
+              </p>
+            );
+          }
+        }
+      }
+
+      return (
+        <p
+          key={i}
+          className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
+          style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+        >
+          {trimmed}
+        </p>
+      );
+    });
+  };
+
+  const borderColors = {
+    critical: "border-l-[#EF4444] bg-[rgba(239,68,68,0.04)]",
+    warning: "border-l-[#F59E0B] bg-[rgba(245,158,11,0.04)]",
+    info: "border-l-[#22C55E] bg-[rgba(34,197,94,0.03)]",
+  };
+
+  return (
+    <div className="h-full overflow-y-auto">
+      {/* Document header */}
+      <div className="border-b border-[rgba(255,255,255,0.06)] px-10 pt-8 pb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[#5A5F6B]">
+          Internal Review v2.4
+        </p>
+        <h1
+          className="mt-4 text-4xl font-normal leading-tight text-[#F1F1F3]"
+          style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+        >
+          {contract.name.replace(/_/g, " ").replace(/\s*v\d+$/i, "")}
+        </h1>
+        <div className="mt-5 flex items-center gap-3">
+          <span className="rounded-md bg-[rgba(255,255,255,0.06)] px-3 py-1 text-xs font-medium text-[#8A8F98]">
+            Draft Stage
+          </span>
+          <span className="text-xs text-[#5A5F6B]">
+            Last modified {timeAgo(contract.uploadedAt)}
+          </span>
+        </div>
+      </div>
+
+      {/* Document body */}
+      <div className="px-10 py-8 pb-40">
+        {segments.map((segment, i) => {
+          if (segment.clauseId) {
+            const isActive = segment.clauseId === activeClauseId;
+            return (
+              <div
+                key={i}
+                id={`clause-text-${segment.clauseId}`}
+                className={`my-2 cursor-pointer rounded-r-lg border-l-3 pl-5 py-2 transition-all duration-200 ${
+                  borderColors[segment.severity!]
+                } ${isActive ? "ring-1 ring-[rgba(59,130,246,0.3)]" : ""}`}
+                onClick={() => onClauseClick(segment.clauseId!)}
+              >
+                {renderText(segment.text)}
+              </div>
+            );
+          }
+          return <div key={i}>{renderText(segment.text)}</div>;
+        })}
+      </div>
+    </div>
+  );
+}

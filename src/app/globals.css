@@ -1,26 +1,117 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: #0A0A0F;
+  --color-surface: #12131A;
+  --color-surface-elevated: #1A1B24;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
+  --color-accent: #3B82F6;
+  --color-accent-hover: #2563EB;
+  --color-critical: #EF4444;
+  --color-critical-bg: rgba(239, 68, 68, 0.1);
+  --color-warning: #F59E0B;
+  --color-warning-bg: rgba(245, 158, 11, 0.1);
+  --color-safe: #22C55E;
+  --color-safe-bg: rgba(34, 197, 94, 0.1);
+  --color-text-primary: #F1F1F3;
+  --color-text-secondary: #8A8F98;
+  --color-text-muted: #5A5F6B;
+  --color-glass: rgba(255, 255, 255, 0.05);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Clause highlighting */
+.clause-highlight-critical {
+  background: rgba(239, 68, 68, 0.12);
+  border-left: 3px solid #EF4444;
+  padding: 2px 8px;
+  margin-left: -11px;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.clause-highlight-critical:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.clause-highlight-warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-left: 3px solid #F59E0B;
+  padding: 2px 8px;
+  margin-left: -11px;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.clause-highlight-warning:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.clause-highlight-info {
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 3px solid #22C55E;
+  padding: 2px 8px;
+  margin-left: -11px;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.clause-highlight-info:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+/* Glassmorphic */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* AI prompt bar border animations */
+@keyframes borderRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.animate-border-rotate {
+  animation: borderRotate 4s linear infinite;
+}
+.animate-border-fizzle {
+  animation: borderRotate 1.5s linear infinite;
+}
+
+/* AI prompt bar placeholder states */
+.ai-placeholder-dim::placeholder {
+  color: rgba(90, 95, 122, 0.7);
+  transition: color 0.2s ease;
+}
+.ai-placeholder-bright::placeholder {
+  color: rgba(255, 255, 255, 0.68);
+  transition: color 0.2s ease;
+}
+
+/* Risk gauge animation */
+@keyframes gauge-fill {
+  from { stroke-dashoffset: 283; }
 }
