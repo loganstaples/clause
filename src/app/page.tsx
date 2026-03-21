@@ -95,7 +95,7 @@ export default function Home() {
     <div className="flex min-h-screen">
       <Sidebar />
 
-      <main className="ml-[220px] flex-1 px-10 pt-8 pb-32">
+      <main className="ml-[220px] flex-1 overflow-x-hidden px-10 pt-8 pb-32">
         <DashboardHeader contractCount={contracts.length || 12} />
 
         {/* Drop zone */}
