@@ -40,6 +40,8 @@ Return your response as valid JSON matching this exact schema:
 
 Respond with ONLY the JSON object. No preamble, no markdown, no backticks.`;
 
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
   const { text } = await req.json();
 
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
         let fullText = "";
         const claudeStream = client.messages.stream({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
+          max_tokens: 16384,
           system: SYSTEM_PROMPT,
           messages: [
             { role: "user", content: `Please analyze this contract:\n\n${text}` },
@@ -110,10 +112,11 @@ export async function POST(req: NextRequest) {
 
         controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`));
       } catch (error) {
-        console.error("Analysis streaming error:", error);
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error("Analysis streaming error:", errMsg);
         controller.enqueue(
           encoder.encode(
-            `event: error\ndata: ${JSON.stringify({ message: "Failed to analyze contract" })}\n\n`
+            `event: error\ndata: ${JSON.stringify({ message: errMsg })}\n\n`
           )
         );
       } finally {
