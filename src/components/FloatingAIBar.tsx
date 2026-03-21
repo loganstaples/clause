@@ -12,6 +12,8 @@ interface FloatingAIBarProps {
   contractText?: string;
   chatHistory: ChatMessage[];
   onChatUpdate: (messages: ChatMessage[]) => void;
+  contextParagraph?: string | null;
+  onClearContext?: () => void;
 }
 
 type BorderState = "idle" | "settled" | "leaving";
@@ -33,6 +35,8 @@ export default function FloatingAIBar({
   contractText,
   chatHistory,
   onChatUpdate,
+  contextParagraph,
+  onClearContext,
 }: FloatingAIBarProps) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -51,6 +55,11 @@ export default function FloatingAIBar({
   // Whether the conic border should spin (during streaming)
   const [borderSpin, setBorderSpin] = useState(false);
   const [spinFlashKey, setSpinFlashKey] = useState(0);
+
+  // Paragraph context state
+  const [activeParagraph, setActiveParagraph] = useState<string | null>(null);
+  const [paragraphQuestions, setParagraphQuestions] = useState<string[]>([]);
+  const [paragraphQuestionsLoading, setParagraphQuestionsLoading] = useState(false);
 
   // Typewriter state
   const [visibleLength, setVisibleLength] = useState(0);
@@ -120,6 +129,11 @@ export default function FloatingAIBar({
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape" && isExpanded && !isStreaming) {
         setIsExpanded(false);
+        setActiveParagraph(null);
+        setParagraphQuestions([]);
+        clearTimers();
+        setBorderState("leaving");
+        timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
       }
       if (e.key === "/" && !isExpanded && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
@@ -139,6 +153,11 @@ export default function FloatingAIBar({
         !modelMenuRef.current?.contains(e.target as Node)
       ) {
         setIsExpanded(false);
+        setActiveParagraph(null);
+        setParagraphQuestions([]);
+        clearTimers();
+        setBorderState("leaving");
+        timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
       }
     };
     document.addEventListener("mousedown", handleClick);
@@ -218,11 +237,61 @@ export default function FloatingAIBar({
     }
   }, [contractText]);
 
+  // Fetch suggested questions for a selected paragraph
+  const fetchParagraphQuestions = useCallback(async (paragraph: string) => {
+    setParagraphQuestionsLoading(true);
+    setParagraphQuestions([]);
+    try {
+      const res = await fetch("/api/paragraph-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paragraph, contractText }),
+      });
+      const data = await res.json();
+      setParagraphQuestions(data.questions || []);
+    } catch {
+      setParagraphQuestions([
+        "What does this mean in plain English?",
+        "Is this standard contract language?",
+        "What risks should I be aware of?",
+      ]);
+    } finally {
+      setParagraphQuestionsLoading(false);
+    }
+  }, [contractText]);
+
+  // Handle paragraph selection from document viewer
+  useEffect(() => {
+    if (contextParagraph && !isStreaming) {
+      setQuestion("");
+      setAnswer("");
+      setFollowups([]);
+      setVisibleLength(0);
+      setActiveParagraph(contextParagraph);
+      setIsExpanded(true);
+      setBorderState("settled");
+      fetchParagraphQuestions(contextParagraph);
+      onClearContext?.();
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [contextParagraph]);
+
   const handleSend = useCallback(async (overrideInput?: string) => {
     const text = (overrideInput ?? input).trim();
     if (!text || isStreaming) return;
 
-    const userMessage: ChatMessage = { role: "user", content: text };
+    // Include paragraph context in the message if available
+    const messageContent = activeParagraph
+      ? `Regarding this specific passage from the contract:\n\n"${activeParagraph}"\n\n${text}`
+      : text;
+
+    // Clear paragraph suggestions since we're entering Q&A mode
+    if (activeParagraph) {
+      setParagraphQuestions([]);
+      setParagraphQuestionsLoading(false);
+    }
+
+    const userMessage: ChatMessage = { role: "user", content: messageContent };
     const newMessages = [...chatHistory, userMessage];
     onChatUpdate(newMessages);
     setInput("");
@@ -286,7 +355,7 @@ export default function FloatingAIBar({
       setBorderSpin(false);
       if (fullAnswer) fetchFollowups(text, fullAnswer);
     }
-  }, [input, isStreaming, chatHistory, onChatUpdate, contractText, selectedModel, fetchFollowups]);
+  }, [input, isStreaming, chatHistory, onChatUpdate, contractText, selectedModel, fetchFollowups, activeParagraph]);
 
   const handleFollowupClick = useCallback((followup: string) => {
     handleSend(followup);
@@ -383,112 +452,172 @@ export default function FloatingAIBar({
                   className="px-5 pt-4 pb-2 overflow-y-auto"
                   style={{ maxHeight: "calc(100vh - 160px)" }}
                 >
-                  {/* User question */}
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.15)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
-                      </svg>
+                  {/* Selected paragraph context */}
+                  {activeParagraph && (
+                    <div className="mb-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5C5C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Selected passage</span>
+                      </div>
+                      <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-3">
+                        <p className="text-[13px] leading-relaxed text-[#999999] italic line-clamp-4">
+                          &ldquo;{activeParagraph}&rdquo;
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm font-medium text-white leading-relaxed">{question}</p>
-                  </div>
+                  )}
 
-                  <div className="h-px bg-[rgba(255,255,255,0.06)] mb-3" />
-
-                  {/* AI answer */}
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.1)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0 min-h-[120px]">
-                      {answer ? (
-                        <div className="ai-markdown text-sm leading-[1.75] text-[#cccccc]">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-[#aaaaaa]">{children}</em>,
-                              ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
-                              ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
-                              li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
-                              h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-white first:mt-0">{children}</h1>,
-                              h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-white first:mt-0">{children}</h2>,
-                              h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-white first:mt-0">{children}</h3>,
-                              code: ({ children, className }) => {
-                                const isBlock = className?.includes("language-");
-                                if (isBlock) {
-                                  return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#cccccc] overflow-x-auto whitespace-pre">{children}</code>;
-                                }
-                                return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d4]">{children}</code>;
-                              },
-                              pre: ({ children }) => <>{children}</>,
-                              blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(240,235,227,0.3)] pl-4 text-[#999999] italic">{children}</blockquote>,
-                              hr: () => <hr className="my-4 border-[rgba(255,255,255,0.06)]" />,
-                              a: ({ children, href }) => <a href={href} className="text-[#F0EBE3] underline underline-offset-2 hover:text-[#F5EFE0]" target="_blank" rel="noopener noreferrer">{children}</a>,
-                            }}
-                          >
-                            {displayedAnswer}
-                          </ReactMarkdown>
-                          {(isStreaming || isTypewriting) && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#F0EBE3]" />}
-                        </div>
-                      ) : (
-                        /* Skeleton — shown while waiting for first token */
-                        <div className="flex flex-col gap-2.5 py-0.5 min-h-[120px]">
-                          <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.06)] animate-pulse w-[92%]" />
-                          <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.05)] animate-pulse w-[78%]" style={{ animationDelay: "100ms" }} />
-                          <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.04)] animate-pulse w-[65%]" style={{ animationDelay: "200ms" }} />
-                          <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.03)] animate-pulse w-[45%]" style={{ animationDelay: "300ms" }} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Follow-ups */}
-                  <AnimatePresence>
-                    {!isStreaming && answer && (followups.length > 0 || followupsLoading) && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, delay: 0.1 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="h-px bg-[rgba(255,255,255,0.06)] mt-4 mb-3" />
-
-                        {followupsLoading ? (
-                          <div className="flex items-center gap-2 py-1">
-                            <div className="flex gap-1">
-                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" />
-                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "150ms" }} />
-                              <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "300ms" }} />
-                            </div>
-                            <span className="text-[11px] text-[#5C5C5C]">Generating follow-ups...</span>
+                  {/* Suggested questions for paragraph (before user asks) */}
+                  {activeParagraph && !question && (
+                    <>
+                      {paragraphQuestionsLoading ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <div className="flex gap-1">
+                            <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" />
+                            <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "150ms" }} />
+                            <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "300ms" }} />
                           </div>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5C5C5C] mb-0.5">Follow up</span>
-                            {followups.map((fu, i) => (
-                              <motion.button
-                                key={i}
-                                initial={{ opacity: 0, x: -8 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.2, delay: i * 0.07 }}
-                                onClick={() => handleFollowupClick(fu)}
-                                className="group flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(240,235,227,0.08)] hover:border-[rgba(240,235,227,0.2)]"
+                          <span className="text-[11px] text-[#5C5C5C]">Generating questions...</span>
+                        </div>
+                      ) : paragraphQuestions.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5C5C5C] mb-0.5">Ask about this passage</span>
+                          {paragraphQuestions.map((q, idx) => (
+                            <motion.button
+                              key={idx}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ duration: 0.2, delay: idx * 0.07 }}
+                              onClick={() => handleSend(q)}
+                              className="group flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(240,235,227,0.08)] hover:border-[rgba(240,235,227,0.2)]"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
+                                <polyline points="9 18 15 12 9 6" />
+                              </svg>
+                              <span className="text-[13px] text-[#999999] group-hover:text-[#cccccc] transition-colors">{q}</span>
+                            </motion.button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+
+                  {/* Q&A section (after user asks a question) */}
+                  {question && (
+                    <>
+                      {activeParagraph && <div className="h-px bg-[rgba(255,255,255,0.06)] mb-3" />}
+
+                      {/* User question */}
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.15)]">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+                          </svg>
+                        </div>
+                        <p className="text-sm font-medium text-white leading-relaxed">{question}</p>
+                      </div>
+
+                      <div className="h-px bg-[rgba(255,255,255,0.06)] mb-3" />
+
+                      {/* AI answer */}
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(240,235,227,0.1)]">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0 min-h-[120px]">
+                          {answer ? (
+                            <div className="ai-markdown text-sm leading-[1.75] text-[#cccccc]">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                                  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                  em: ({ children }) => <em className="italic text-[#aaaaaa]">{children}</em>,
+                                  ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
+                                  ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
+                                  li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                                  h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-white first:mt-0">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-white first:mt-0">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-white first:mt-0">{children}</h3>,
+                                  code: ({ children, className }) => {
+                                    const isBlock = className?.includes("language-");
+                                    if (isBlock) {
+                                      return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#cccccc] overflow-x-auto whitespace-pre">{children}</code>;
+                                    }
+                                    return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d4]">{children}</code>;
+                                  },
+                                  pre: ({ children }) => <>{children}</>,
+                                  blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(240,235,227,0.3)] pl-4 text-[#999999] italic">{children}</blockquote>,
+                                  hr: () => <hr className="my-4 border-[rgba(255,255,255,0.06)]" />,
+                                  a: ({ children, href }) => <a href={href} className="text-[#F0EBE3] underline underline-offset-2 hover:text-[#F5EFE0]" target="_blank" rel="noopener noreferrer">{children}</a>,
+                                }}
                               >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
-                                  <polyline points="9 18 15 12 9 6" />
-                                </svg>
-                                <span className="text-[13px] text-[#999999] group-hover:text-[#cccccc] transition-colors">{fu}</span>
-                              </motion.button>
-                            ))}
-                          </div>
+                                {displayedAnswer}
+                              </ReactMarkdown>
+                              {(isStreaming || isTypewriting) && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#F0EBE3]" />}
+                            </div>
+                          ) : (
+                            /* Skeleton — shown while waiting for first token */
+                            <div className="flex flex-col gap-2.5 py-0.5 min-h-[120px]">
+                              <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.06)] animate-pulse w-[92%]" />
+                              <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.05)] animate-pulse w-[78%]" style={{ animationDelay: "100ms" }} />
+                              <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.04)] animate-pulse w-[65%]" style={{ animationDelay: "200ms" }} />
+                              <div className="h-3.5 rounded-full bg-[rgba(255,255,255,0.03)] animate-pulse w-[45%]" style={{ animationDelay: "300ms" }} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Follow-ups */}
+                      <AnimatePresence>
+                        {!isStreaming && answer && (followups.length > 0 || followupsLoading) && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.3, delay: 0.1 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="h-px bg-[rgba(255,255,255,0.06)] mt-4 mb-3" />
+
+                            {followupsLoading ? (
+                              <div className="flex items-center gap-2 py-1">
+                                <div className="flex gap-1">
+                                  <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" />
+                                  <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "150ms" }} />
+                                  <span className="h-1 w-1 rounded-full bg-[#5C5C5C] animate-pulse" style={{ animationDelay: "300ms" }} />
+                                </div>
+                                <span className="text-[11px] text-[#5C5C5C]">Generating follow-ups...</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#5C5C5C] mb-0.5">Follow up</span>
+                                {followups.map((fu, i) => (
+                                  <motion.button
+                                    key={i}
+                                    initial={{ opacity: 0, x: -8 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.2, delay: i * 0.07 }}
+                                    onClick={() => handleFollowupClick(fu)}
+                                    className="group flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(240,235,227,0.08)] hover:border-[rgba(240,235,227,0.2)]"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity">
+                                      <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                    <span className="text-[13px] text-[#999999] group-hover:text-[#cccccc] transition-colors">{fu}</span>
+                                  </motion.button>
+                                ))}
+                              </div>
+                            )}
+                          </motion.div>
                         )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      </AnimatePresence>
+                    </>
+                  )}
                 </div>
 
                 {/* Divider between content and input */}
@@ -521,7 +650,7 @@ export default function FloatingAIBar({
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                placeholder={placeholder}
+                placeholder={activeParagraph && !question ? "Ask about this passage..." : placeholder}
                 rows={1}
                 className={`w-full bg-transparent text-sm focus:outline-none focus:ring-0 border-none outline-none resize-none overflow-y-auto transition-colors duration-200 ${isFocused ? "ai-placeholder-bright" : "ai-placeholder-dim"}`}
                 style={{ boxShadow: "none", WebkitAppearance: "none", color: isFocused ? "#ffffff" : "rgba(234, 234, 240, 0.6)" }}
@@ -534,7 +663,7 @@ export default function FloatingAIBar({
               <div>
                 {isExpanded && !isStreaming && (
                   <button
-                    onClick={() => setIsExpanded(false)}
+                    onClick={() => { setIsExpanded(false); setActiveParagraph(null); setParagraphQuestions([]); clearTimers(); setBorderState("leaving"); timersRef.current.push(setTimeout(() => setBorderState("idle"), 500)); }}
                     className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium text-[#5C5C5C] rounded-lg transition-colors hover:text-[#999999] hover:bg-[rgba(255,255,255,0.04)]"
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -573,10 +702,10 @@ export default function FloatingAIBar({
                     className="fixed z-[60] w-44 rounded-xl overflow-hidden"
                     style={{
                       top: menuPos.top, right: menuPos.right, transform: "translateY(-100%)",
-                      background: "linear-gradient(145deg, rgba(14, 16, 24, 0.95) 0%, rgba(20, 22, 32, 0.9) 100%)",
+                      background: "linear-gradient(135deg, rgba(12, 12, 12, 0.96) 0%, rgba(18, 18, 18, 0.94) 100%)",
                       backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                      boxShadow: "0 -8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.02) inset",
+                      border: "1px solid rgba(255, 255, 255, 0.10)",
+                      boxShadow: "0 -8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03) inset",
                     }}
                   >
                     {MODELS.map((m) => (

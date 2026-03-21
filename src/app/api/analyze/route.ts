@@ -12,11 +12,11 @@ For each flagged clause, provide:
 4. A section/page reference if identifiable
 5. A plain-English explanation (2-3 sentences, written for someone with no legal background)
 6. What a Fortune 500 company's legal team would do about this clause (2-3 sentences)
-7. Suggested replacement language that would be more favorable to the small business owner
+7. Suggested replacement language that would be more favorable to the small business owner. This MUST be ready-to-use contract text that can directly replace the original clause verbatim — no labels, no "OPTIONAL:", no instructions, no commentary, no bracketed placeholders. Write it as final contract language in the same style and tone as the original document.
 
 Also provide:
-- An overall contract quality score from 0-100 (100 = excellent deal, very fair to the small business owner; 0 = extremely unfavorable). Score higher when terms are balanced and standard, lower when there are many unfavorable or risky clauses.
-- A one-sentence summary of the contract's overall fairness
+- An overall contract favorability score from 0-100 representing how ready the contract is to sign as-is. 100 = excellent deal, very favorable to the small business owner, ready to sign. 0 = extremely unfavorable, needs major revisions. Score higher when terms are balanced and standard, lower when there are many unfavorable or problematic clauses.
+- A one-sentence summary of the contract's overall favorability for the small business owner
 - Counts of critical, warning, and info-level clauses
 
 Return your response as valid JSON matching this exact schema:

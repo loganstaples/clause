@@ -13,13 +13,13 @@ interface ClauseCardProps {
 
 const severityConfig = {
   critical: {
-    label: "CRITICAL RISK",
+    label: "CRITICAL",
     color: "#EF4444",
     bg: "rgba(239,68,68,0.1)",
     border: "rgba(239,68,68,0.2)",
   },
   warning: {
-    label: "WARNING RISK",
+    label: "NEEDS REVIEW",
     color: "#F59E0B",
     bg: "rgba(245,158,11,0.1)",
     border: "rgba(245,158,11,0.2)",

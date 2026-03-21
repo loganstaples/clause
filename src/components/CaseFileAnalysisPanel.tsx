@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import RiskGauge from "@/components/RiskGauge";
 import { ContractAnalysis, Clause } from "@/lib/types";
@@ -18,6 +17,8 @@ interface CaseFileAnalysisPanelProps {
   onRetry?: () => void;
   activeClauseId: string | null;
   onClauseClick: (clauseId: string) => void;
+  onRevise?: (clause: Clause) => void;
+  onAskAI?: (clause: Clause) => void;
 }
 
 function SeverityBadge({
@@ -45,24 +46,25 @@ function CaseFileClauseCard({
   clause,
   isActive,
   onClick,
+  onRevise,
+  onAskAI,
 }: {
   clause: Clause;
   isActive: boolean;
   onClick: () => void;
+  onRevise?: (clause: Clause) => void;
+  onAskAI?: (clause: Clause) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(clause.severity === "critical");
-  const [copied, setCopied] = useState(false);
-
   const severityStyles = {
     critical: {
-      label: "CRITICAL RISK",
+      label: "CRITICAL",
       color: "#EF4444",
       bg: "rgba(239, 68, 68, 0.12)",
       borderColor: "rgba(239, 68, 68, 0.25)",
       cardBg: "linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(239, 68, 68, 0.01) 100%)",
     },
     warning: {
-      label: "WARNING RISK",
+      label: "NEEDS REVIEW",
       color: "#F59E0B",
       bg: "rgba(245, 158, 11, 0.12)",
       borderColor: "rgba(245, 158, 11, 0.25)",
@@ -78,12 +80,6 @@ function CaseFileClauseCard({
   };
 
   const style = severityStyles[clause.severity];
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(clause.suggestedReplacement);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   // Parse location for display (e.g., "Section 4.2" → "SECTION 4.2 · PAGE 8")
   const locationDisplay = clause.location.toUpperCase();
@@ -101,10 +97,7 @@ function CaseFileClauseCard({
     >
       {/* Header */}
       <button
-        onClick={() => {
-          setIsExpanded(!isExpanded);
-          onClick();
-        }}
+        onClick={onClick}
         className="w-full px-5 pt-5 pb-3 text-left"
       >
         <div className="flex items-start justify-between">
@@ -152,79 +145,55 @@ function CaseFileClauseCard({
         </p>
       </button>
 
-      {/* Expanded content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5">
-              {/* Corporate Playbook */}
-              {clause.severity !== "info" && (
-                <div className="mt-3 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-3.5">
-                  <div className="mb-2 flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                    </svg>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#999999]">
-                      Corporate Playbook
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-[#999999]">
-                    {clause.corporateBenchmark}
-                  </p>
-                </div>
-              )}
-
-              {/* Recommended Language */}
-              {clause.severity !== "info" && (
-                <div className="mt-4">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#5C5C5C]">
-                    Recommended Language
-                  </p>
-                  <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#050505] px-4 py-3.5">
-                    <p
-                      className="text-[13px] leading-relaxed text-[#cccccc]"
-                      style={{
-                        fontFamily:
-                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      }}
-                    >
-                      {clause.suggestedReplacement}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleCopy}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#5C5C5C] transition-colors hover:text-[#999999]"
-                  >
-                    {copied ? (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                        Copy to clipboard
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
+      {/* Card content */}
+      <div className="px-5 pb-5">
+        {/* What a corporation would do */}
+        {clause.severity !== "info" && (
+          <div className="mt-3 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-3.5">
+            <div className="mb-2 flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#999999]">
+                What a Corporation Would Do
+              </span>
             </div>
-          </motion.div>
+            <p className="text-sm leading-relaxed text-[#999999]">
+              {clause.corporateBenchmark}
+            </p>
+          </div>
         )}
-      </AnimatePresence>
+
+        {/* Action buttons */}
+        {clause.severity !== "info" && (
+          <div className="mt-4 flex gap-2">
+            {onRevise && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRevise(clause); }}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-sm font-medium text-[#F0EBE3] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-white"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Revise
+              </button>
+            )}
+            {onAskAI && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onAskAI(clause); }}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-sm font-medium text-[#F0EBE3] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-white"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                Ask AI
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -277,6 +246,8 @@ export default function CaseFileAnalysisPanel({
   onRetry,
   activeClauseId,
   onClauseClick,
+  onRevise,
+  onAskAI,
 }: CaseFileAnalysisPanelProps) {
   // Error state
   if (error && !analysis) {
@@ -330,7 +301,7 @@ export default function CaseFileAnalysisPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Risk overview header */}
+      {/* Score overview header */}
       <div className="shrink-0 border-b border-[rgba(255,255,255,0.06)] px-6 py-6">
         <div className="flex items-start gap-5">
           <div className="shrink-0">
@@ -370,6 +341,8 @@ export default function CaseFileAnalysisPanel({
                   clause={clause}
                   isActive={clause.id === activeClauseId}
                   onClick={() => onClauseClick(clause.id)}
+                  onRevise={onRevise}
+                  onAskAI={onAskAI}
                 />
               </motion.div>
             ))}
