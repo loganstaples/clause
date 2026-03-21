@@ -26,7 +26,7 @@ export interface Contract {
   uploadedAt: string;
   rawText: string;
   contractType?: string;
-  analysis: ContractAnalysis;
+  analysis: ContractAnalysis | null;
   chatHistory: Array<{
     role: "user" | "assistant";
     content: string;
