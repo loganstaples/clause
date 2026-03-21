@@ -309,8 +309,8 @@ export default function CaseFileAnalysisPanel({
 
   // Determine data source: completed analysis takes priority over streaming
   const header = analysis
-    ? { riskScore: analysis.riskScore, summary: analysis.summary, counts: analysis.counts }
-    : streamingHeader!;
+    ? { riskScore: analysis.riskScore, summary: analysis.summary }
+    : { riskScore: streamingHeader!.riskScore, summary: streamingHeader!.summary };
   const displayClauses = analysis
     ? [...analysis.clauses].sort((a, b) => {
         const order = { critical: 0, warning: 1, info: 2 };
@@ -320,6 +320,13 @@ export default function CaseFileAnalysisPanel({
         const order = { critical: 0, warning: 1, info: 2 };
         return order[a.severity] - order[b.severity];
       });
+
+  // Compute counts from actual clauses, not the model's predictions
+  const counts = {
+    critical: displayClauses.filter((c) => c.severity === "critical").length,
+    warning: displayClauses.filter((c) => c.severity === "warning").length,
+    info: displayClauses.filter((c) => c.severity === "info").length,
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -331,14 +338,14 @@ export default function CaseFileAnalysisPanel({
           </div>
           <div className="flex-1 pt-1">
             <div className="flex flex-wrap items-center gap-2">
-              {header.counts.critical > 0 && (
-                <SeverityBadge count={header.counts.critical} label="Critical" color="#EF4444" bg="rgba(239, 68, 68, 0.1)" />
+              {counts.critical > 0 && (
+                <SeverityBadge count={counts.critical} label="Critical" color="#EF4444" bg="rgba(239, 68, 68, 0.1)" />
               )}
-              {header.counts.warning > 0 && (
-                <SeverityBadge count={header.counts.warning} label="Warning" color="#F59E0B" bg="rgba(245, 158, 11, 0.1)" />
+              {counts.warning > 0 && (
+                <SeverityBadge count={counts.warning} label="Warning" color="#F59E0B" bg="rgba(245, 158, 11, 0.1)" />
               )}
-              {header.counts.info > 0 && (
-                <SeverityBadge count={header.counts.info} label="Standard" color="#22C55E" bg="rgba(34, 197, 94, 0.1)" />
+              {counts.info > 0 && (
+                <SeverityBadge count={counts.info} label="Standard" color="#22C55E" bg="rgba(34, 197, 94, 0.1)" />
               )}
             </div>
             <p className="mt-3 text-sm leading-relaxed text-[#999999]">

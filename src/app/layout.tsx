@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
-import { Instrument_Sans, Instrument_Serif } from "next/font/google";
+import { Inter, Instrument_Sans, Instrument_Serif, Newsreader } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const instrumentSans = Instrument_Sans({
   variable: "--font-sans",
@@ -12,6 +19,18 @@ const instrumentSerif = Instrument_Serif({
   variable: "--font-serif",
   subsets: ["latin"],
   weight: ["400"],
+});
+
+const liberationSerif = localFont({
+  src: "../fonts/LiberationSerif-Bold.ttf",
+  variable: "--font-liberation-serif",
+  weight: "700",
+});
+
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -28,12 +47,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${instrumentSans.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${newsreader.variable} ${liberationSerif.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body
-        className="min-h-full flex flex-col"
-        style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
-      >
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
       </body>
     </html>

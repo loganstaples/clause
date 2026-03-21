@@ -13,13 +13,13 @@ interface ClauseCardProps {
 
 const severityConfig = {
   critical: {
-    label: "CRITICAL",
+    label: "CRITICAL RISK",
     color: "#EF4444",
     bg: "rgba(239,68,68,0.1)",
     border: "rgba(239,68,68,0.2)",
   },
   warning: {
-    label: "WARNING",
+    label: "WARNING RISK",
     color: "#F59E0B",
     bg: "rgba(245,158,11,0.1)",
     border: "rgba(245,158,11,0.2)",
@@ -52,87 +52,99 @@ export default function ClauseCard({
   };
 
   return (
-    <motion.div
+    <motion.article
       id={`clause-card-${clause.id}`}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.06 }}
-      className={`rounded-xl border transition-all duration-200 ${
+      className={`overflow-hidden rounded-2xl border transition-all duration-200 ${
         isActive
-          ? "border-[rgba(59,130,246,0.4)] ring-1 ring-[rgba(59,130,246,0.2)]"
-          : "border-[rgba(255,255,255,0.06)]"
-      } bg-[#12131A]`}
+          ? "border-[rgba(240,235,227,0.4)] ring-1 ring-[rgba(240,235,227,0.2)]"
+          : "border-white/[0.04]"
+      } bg-[#141414] hover:bg-[#1A1A1A]`}
     >
-      {/* Header — always visible */}
-      <button
-        onClick={() => {
-          setIsExpanded(!isExpanded);
-          onClick?.();
-        }}
-        className="flex w-full items-start gap-3 px-5 py-4 text-left"
-      >
-        <span
-          className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-          style={{
-            color: config.color,
-            backgroundColor: config.bg,
-          }}
-        >
-          {config.label}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-[#F1F1F3]">
-            {clause.title}
-          </h3>
-          <p className="mt-0.5 text-xs text-[#5A5F6B]">{clause.location}</p>
-          {!isExpanded && (
-            <p className="mt-1.5 line-clamp-2 text-xs text-[#8A8F98]">
-              {clause.explanation}
-            </p>
-          )}
-        </div>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#5A5F6B"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`mt-1 shrink-0 transition-transform duration-200 ${
-            isExpanded ? "rotate-180" : ""
-          }`}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-
-      {/* Expanded content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
+      <div className="p-8 space-y-8">
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <button
+            onClick={() => {
+              setIsExpanded(!isExpanded);
+              onClick?.();
+            }}
+            className="text-left space-y-3"
           >
-            <div className="border-t border-[rgba(255,255,255,0.04)] px-5 pb-5 pt-4">
-              {/* Plain English explanation */}
-              <p className="text-sm leading-relaxed text-[#8A8F98]">
-                {clause.explanation}
-              </p>
+            <span
+              className="inline-block rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em]"
+              style={{
+                color: config.color,
+                backgroundColor: config.bg,
+                border: `1px solid ${config.border}`,
+              }}
+            >
+              {config.label}
+            </span>
+            <h4
+              className="text-2xl text-[#FFFFFF]"
+              style={{ fontFamily: "var(--font-newsreader), serif" }}
+            >
+              {clause.title}
+            </h4>
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#999999]/50">
+              {clause.location}
+            </p>
+          </button>
+          <button
+            onClick={() => {
+              setIsExpanded(!isExpanded);
+              onClick?.();
+            }}
+            className="text-[#999999]/40 hover:text-white transition-colors p-1"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`transition-transform duration-200 ${
+                isExpanded ? "rotate-180" : ""
+              }`}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
 
-              {/* What a corporation would do */}
-              <div className="mt-4 rounded-lg bg-[rgba(59,130,246,0.06)] px-4 py-3">
-                <div className="mb-1.5 flex items-center gap-1.5">
+        {/* Explanation — always show as italic quote */}
+        <p
+          className="text-lg italic leading-relaxed text-[#FFFFFF]/80 opacity-90"
+          style={{ fontFamily: "var(--font-newsreader), serif" }}
+        >
+          &ldquo;{clause.explanation}&rdquo;
+        </p>
+
+        {/* Expanded content */}
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden space-y-8"
+            >
+              {/* Corporate Playbook */}
+              <div className="rounded-xl border-l-2 border-[#F0EBE3]/40 bg-[#F0EBE3]/5 p-6">
+                <div className="mb-3 flex items-center gap-3">
                   <svg
                     width="14"
                     height="14"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="#3B82F6"
+                    stroke="#F0EBE3"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -140,93 +152,92 @@ export default function ClauseCard({
                     <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
                     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                   </svg>
-                  <span className="text-xs font-semibold text-[#3B82F6]">
-                    What a corporation would do
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#F0EBE3]">
+                    Corporate Playbook
                   </span>
                 </div>
-                <p className="text-sm leading-relaxed text-[#8A8F98]">
+                <p className="text-sm leading-relaxed text-[#999999]">
                   {clause.corporateBenchmark}
                 </p>
               </div>
 
-              {/* Suggested replacement */}
-              <div className="mt-4">
-                <div className="mb-2 flex items-center gap-1.5">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#22C55E"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              {/* Recommended Language */}
+              <div className="space-y-4">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#999999]/40">
+                  Recommended Language
+                </label>
+                <div className="group/code relative rounded-xl border border-white/[0.02] bg-black/40 p-6">
+                  <p
+                    className="pr-8 text-xs leading-relaxed text-[#F0EBE3]/80"
+                    style={{ fontFamily: "var(--font-sans), monospace" }}
                   >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  <span className="text-xs font-semibold text-[#22C55E]">
-                    Suggested replacement language
-                  </span>
-                </div>
-                <div className="rounded-lg border border-[rgba(255,255,255,0.06)] bg-[#0A0A0F] p-4">
-                  <p className="text-sm leading-relaxed text-[#8A8F98]" style={{ fontFamily: "var(--font-sans)" }}>
-                    &ldquo;{clause.suggestedReplacement}&rdquo;
+                    {clause.suggestedReplacement}
                   </p>
-                </div>
-                <div className="mt-2 flex gap-2">
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1.5 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-xs font-medium text-[#8A8F98] transition-all duration-150 hover:bg-[rgba(255,255,255,0.06)] hover:text-[#F1F1F3]"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-white/[0.04] p-2 opacity-0 transition-opacity hover:bg-white/10 group-hover/code:opacity-100"
                   >
                     {copied ? (
-                      <>
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#22C55E"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        Copied
-                      </>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#22C55E"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
                     ) : (
-                      <>
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <rect
-                            x="9"
-                            y="9"
-                            width="13"
-                            height="13"
-                            rx="2"
-                            ry="2"
-                          />
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                        Copy
-                      </>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#999999"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
                     )}
                   </button>
                 </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Explore Strategy button when collapsed */}
+        {!isExpanded && (
+          <button
+            onClick={() => {
+              setIsExpanded(true);
+              onClick?.();
+            }}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/[0.06] py-4 text-xs font-bold uppercase tracking-[0.2em] transition-colors hover:bg-white/[0.02]"
+          >
+            Explore Strategy
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
         )}
-      </AnimatePresence>
-    </motion.div>
+      </div>
+    </motion.article>
   );
 }

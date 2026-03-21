@@ -36,6 +36,11 @@ body {
   100% { transform: translateX(400%); }
 }
 
+@keyframes progress-grow {
+  0% { width: 0%; }
+  100% { width: 95%; }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 4px;

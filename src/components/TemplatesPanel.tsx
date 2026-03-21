@@ -14,8 +14,8 @@ export default function TemplatesPanel({ onTemplateClick }: TemplatesPanelProps)
   return (
     <div className="w-[280px] flex-shrink-0">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[#F1F1F3]">Templates</h2>
-        <button className="text-xs font-medium text-[#3B82F6] hover:text-[#60a5fa] transition-colors">
+        <h2 className="text-lg font-semibold text-white">Templates</h2>
+        <button className="text-xs font-medium text-[#F0EBE3] hover:text-[#F5EFE0] transition-colors">
           View Library
         </button>
       </div>
@@ -25,18 +25,22 @@ export default function TemplatesPanel({ onTemplateClick }: TemplatesPanelProps)
           <button
             key={template.title}
             onClick={onTemplateClick}
-            className="group flex items-center justify-between rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-4 py-4 text-left transition-all duration-150 hover:border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.04)]"
+            className="group flex items-center justify-between rounded-xl border-0 px-5 py-6 text-left transition-all duration-200 hover:translate-y-[-1px]"
+            style={{
+              background: "linear-gradient(135deg, #161616 0%, #0A0A0A 100%)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
           >
             <div>
-              <p className="text-sm font-medium text-[#F1F1F3]">{template.title}</p>
-              <p className="mt-0.5 text-xs text-[#5A5F6B]">{template.subtitle}</p>
+              <p className="text-sm font-medium text-white">{template.title}</p>
+              <p className="mt-0.5 text-xs text-[#5C5C5C]">{template.subtitle}</p>
             </div>
             <svg
               width="16"
               height="16"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#5A5F6B"
+              stroke="#5C5C5C"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

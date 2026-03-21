@@ -23,7 +23,6 @@ export default function DocumentViewer({
   onClauseClick,
 }: DocumentViewerProps) {
   const segments = useMemo(() => {
-    // Find all clause positions in the text
     const matches: Array<{
       start: number;
       end: number;
@@ -32,7 +31,6 @@ export default function DocumentViewer({
     }> = [];
 
     for (const clause of clauses) {
-      // Normalize whitespace for matching
       const normalizedOriginal = clause.originalText
         .replace(/\s+/g, " ")
         .trim()
@@ -41,8 +39,6 @@ export default function DocumentViewer({
 
       const idx = normalizedText.indexOf(normalizedOriginal);
       if (idx !== -1) {
-        // Map back to original text position (approximate since we normalized)
-        // Find the actual position by searching in the original text around the normalized position
         const searchStart = Math.max(0, idx - 50);
         const searchEnd = Math.min(
           text.length,
@@ -50,20 +46,17 @@ export default function DocumentViewer({
         );
         const searchRegion = text.substring(searchStart, searchEnd);
 
-        // Try to find the first few words in the original text
         const firstWords = clause.originalText.split(/\s+/).slice(0, 5).join("\\s+");
         const regex = new RegExp(firstWords, "i");
         const match = searchRegion.match(regex);
 
         if (match && match.index !== undefined) {
           const actualStart = searchStart + match.index;
-          // Estimate end position
           const actualEnd = Math.min(
             text.length,
             actualStart + clause.originalText.length + 20
           );
 
-          // Find the actual end by looking for the last few words
           const lastWords = clause.originalText.split(/\s+/).slice(-5).join("\\s+");
           const endRegex = new RegExp(lastWords, "i");
           const endRegion = text.substring(actualStart, actualEnd + 100);
@@ -83,10 +76,8 @@ export default function DocumentViewer({
       }
     }
 
-    // Sort matches by start position
     matches.sort((a, b) => a.start - b.start);
 
-    // Build segments
     const result: TextSegment[] = [];
     let currentPos = 0;
 
@@ -119,26 +110,23 @@ export default function DocumentViewer({
     return result;
   }, [text, clauses]);
 
-  // Format text into paragraphs
-  const renderText = (content: string) => {
+  const renderText = (content: string, dimmed: boolean) => {
     return content.split("\n\n").map((paragraph, i) => {
       const trimmed = paragraph.trim();
       if (!trimmed) return null;
 
-      // Check if it's a heading (ARTICLE or all-caps line)
       const isHeading =
         /^ARTICLE\s+\d/i.test(trimmed) ||
         (trimmed === trimmed.toUpperCase() && trimmed.length < 100 && !trimmed.includes("."));
 
-      // Check if it's a section number
       const isSection = /^\d+\.\d+/.test(trimmed);
 
       if (isHeading) {
         return (
           <h3
             key={i}
-            className="mb-3 mt-8 text-sm font-bold uppercase tracking-wide text-[#F1F1F3]"
-            style={{ fontFamily: "var(--font-serif), serif" }}
+            className={`mb-4 mt-10 text-xl italic ${dimmed ? "text-[#FFFFFF]/60" : "text-[#FFFFFF]"}`}
+            style={{ fontFamily: "var(--font-newsreader), serif" }}
           >
             {trimmed}
           </h3>
@@ -148,9 +136,12 @@ export default function DocumentViewer({
       return (
         <p
           key={i}
-          className={`mb-3 text-sm leading-relaxed ${
-            isSection ? "text-[#c0c4cc]" : "text-[#8A8F98]"
+          className={`mb-4 text-lg leading-[1.75] ${
+            dimmed
+              ? isSection ? "text-[#FFFFFF]/60" : "text-[#FFFFFF]/60"
+              : "text-[#FFFFFF]/90"
           }`}
+          style={{ fontFamily: "var(--font-newsreader), serif" }}
         >
           {trimmed}
         </p>
@@ -159,25 +150,48 @@ export default function DocumentViewer({
   };
 
   return (
-    <div className="h-full overflow-y-auto px-6 py-6">
-      {segments.map((segment, i) => {
-        if (segment.clauseId) {
-          const isActive = segment.clauseId === activeClauseId;
+    <div className="h-full overflow-y-auto px-8 py-8 md:px-12 lg:px-20">
+      <div className="mx-auto max-w-xl space-y-6">
+        {segments.map((segment, i) => {
+          if (segment.clauseId) {
+            const isActive = segment.clauseId === activeClauseId;
+            const borderColor =
+              segment.severity === "critical"
+                ? "bg-red-500/60 group-hover:bg-red-500"
+                : segment.severity === "warning"
+                ? "bg-amber-500/60 group-hover:bg-amber-500"
+                : "bg-green-500/60 group-hover:bg-green-500";
+            const bgColor =
+              segment.severity === "critical"
+                ? "bg-red-500/[0.03]"
+                : segment.severity === "warning"
+                ? "bg-amber-500/[0.03]"
+                : "bg-green-500/[0.03]";
+
+            return (
+              <div
+                key={i}
+                id={`clause-text-${segment.clauseId}`}
+                className={`group relative cursor-pointer ${
+                  isActive ? "ring-1 ring-[rgba(240,235,227,0.3)]" : ""
+                }`}
+                onClick={() => onClauseClick(segment.clauseId!)}
+              >
+                <div className={`absolute -left-8 top-0 bottom-0 w-[2px] rounded-full transition-all ${borderColor}`} />
+                <div className={`${bgColor} rounded-r-xl p-6 -mx-6`}>
+                  {renderText(segment.text, false)}
+                </div>
+              </div>
+            );
+          }
           return (
-            <div
-              key={i}
-              id={`clause-text-${segment.clauseId}`}
-              className={`clause-highlight-${segment.severity} my-2 ${
-                isActive ? "ring-1 ring-[rgba(59,130,246,0.3)]" : ""
-              }`}
-              onClick={() => onClauseClick(segment.clauseId!)}
-            >
-              {renderText(segment.text)}
+            <div key={i}>
+              {renderText(segment.text, true)}
             </div>
           );
-        }
-        return <div key={i}>{renderText(segment.text)}</div>;
-      })}
+        })}
+        <div className="h-48" />
+      </div>
     </div>
   );
 }

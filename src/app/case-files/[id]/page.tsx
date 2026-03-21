@@ -106,7 +106,9 @@ export default function CaseFilePage({
 
       {/* Progress bar */}
       <div className={`h-[2px] w-full shrink-0 overflow-hidden transition-opacity duration-500 ${isAnalyzing ? "opacity-100" : "opacity-0"}`}>
-        <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-white/80" />
+        {isAnalyzing && (
+          <div className="h-full animate-[progress-grow_60s_ease-out_forwards] bg-white/80" />
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
