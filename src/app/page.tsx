@@ -44,22 +44,12 @@ export default function Home() {
 
         const { text } = await uploadRes.json();
 
-        const analyzeRes = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-
-        if (!analyzeRes.ok) throw new Error("Analysis failed");
-
-        const analysis = await analyzeRes.json();
-
         const contract: Contract = {
           id: uuidv4(),
           name: file.name.replace(/\.(pdf|docx?)$/i, ""),
           uploadedAt: new Date().toISOString(),
           rawText: text,
-          analysis,
+          analysis: null,
           chatHistory: [],
         };
 

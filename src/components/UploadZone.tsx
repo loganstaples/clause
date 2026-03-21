@@ -52,11 +52,15 @@ export default function UploadZone({ onUpload, isUploading }: UploadZoneProps) {
       onDragLeave={handleDragOut}
       onDragOver={handleDrag}
       onDrop={handleDrop}
-      className={`relative flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-all duration-200 ${
-        isDragging
-          ? "border-[#3B82F6] bg-[rgba(59,130,246,0.06)]"
-          : "border-[rgba(255,255,255,0.08)] bg-[#12131A] hover:border-[rgba(255,255,255,0.15)] hover:bg-[#151620]"
+      className={`relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-2xl border-0 transition-all duration-200 ${
+        isDragging ? "translate-y-[-1px]" : "hover:translate-y-[-1px]"
       }`}
+      style={{
+        background: isDragging
+          ? "linear-gradient(135deg, #1A1A1A 0%, #0A0A0A 100%)"
+          : "linear-gradient(135deg, #161616 0%, #090909 100%)",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
     >
       <input
         type="file"
@@ -68,20 +72,20 @@ export default function UploadZone({ onUpload, isUploading }: UploadZoneProps) {
 
       {isUploading ? (
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#3B82F6]" />
-          <p className="text-sm font-medium text-[#8A8F98]">
-            Analyzing contract...
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#F0EBE3]" />
+          <p className="text-sm font-medium text-[#999999]">
+            Extracting text...
           </p>
         </div>
       ) : (
         <>
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[rgba(59,130,246,0.1)]">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[rgba(240,235,227,0.1)]">
             <svg
               width="24"
               height="24"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#3B82F6"
+              stroke="#F0EBE3"
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -91,12 +95,12 @@ export default function UploadZone({ onUpload, isUploading }: UploadZoneProps) {
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
           </div>
-          <p className="text-base font-medium text-[#F1F1F3]">
+          <p className="text-xl font-semibold text-white">
             {isDragging
               ? "Drop your contract here"
               : "Drop a contract for instant analysis"}
           </p>
-          <p className="mt-1.5 text-sm text-[#5A5F6B]">
+          <p className="mt-2 text-base text-[#5C5C5C]">
             PDF, DOCX up to 25MB &bull; Automated Clause Extraction
           </p>
         </>
