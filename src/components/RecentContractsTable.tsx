@@ -32,11 +32,13 @@ const DEMO_CONTRACTS = [
 
 interface RecentContractsTableProps {
   contracts: Contract[];
+  loaded?: boolean;
   onDemoClick?: () => void;
 }
 
-export default function RecentContractsTable({ contracts, onDemoClick }: RecentContractsTableProps) {
+export default function RecentContractsTable({ contracts, loaded, onDemoClick }: RecentContractsTableProps) {
   const hasRealContracts = contracts.length > 0;
+  const showDemoRows = !hasRealContracts && loaded;
 
   return (
     <div className="flex-1">
@@ -93,7 +95,7 @@ export default function RecentContractsTable({ contracts, onDemoClick }: RecentC
               </Link>
             );
           })
-        ) : (
+        ) : showDemoRows ? (
           DEMO_CONTRACTS.map((item, i) => (
             <div
               key={i}
@@ -134,7 +136,7 @@ export default function RecentContractsTable({ contracts, onDemoClick }: RecentC
               </button>
             </div>
           ))
-        )}
+        ) : null}
       </div>
     </div>
   );

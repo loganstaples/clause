@@ -17,11 +17,13 @@ import { DEMO_ANALYSIS } from "@/lib/demo-analysis";
 export default function Home() {
   const router = useRouter();
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     setContracts(getContracts());
+    setLoaded(true);
   }, []);
 
   const handleUpload = useCallback(
@@ -114,7 +116,7 @@ export default function Home() {
         {/* Templates + Recent Contracts side by side */}
         <div className="mt-10 flex gap-8">
           <TemplatesPanel onTemplateClick={loadDemo} />
-          <RecentContractsTable contracts={contracts} onDemoClick={loadDemo} />
+          <RecentContractsTable contracts={contracts} loaded={loaded} onDemoClick={loadDemo} />
         </div>
       </main>
 
