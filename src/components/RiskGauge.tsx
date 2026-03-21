@@ -22,7 +22,7 @@ export default function RiskGauge({ score, loading }: RiskGaugeProps) {
     circumference - (animatedScore / 100) * circumference;
 
   const color =
-    score >= 70 ? "#ffb4ab" : score >= 40 ? "#F59E0B" : "#22C55E";
+    score >= 70 ? "#22C55E" : score >= 40 ? "#F59E0B" : "#EF4444";
 
   if (loading) {
     return (

@@ -64,7 +64,7 @@ export default function DocumentsPage() {
             <div className="grid grid-cols-[1fr_80px_100px_120px_60px] gap-4 border-b border-[rgba(255,255,255,0.06)] px-5 py-3">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Name</span>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Type</span>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Risk Score</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Score</span>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Uploaded</span>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">View</span>
             </div>
@@ -100,9 +100,9 @@ export default function DocumentsPage() {
                       <span
                         className="text-sm font-semibold"
                         style={{
-                          color: contract.analysis.riskScore >= 70 ? "#EF4444"
+                          color: contract.analysis.riskScore >= 70 ? "#22C55E"
                             : contract.analysis.riskScore >= 40 ? "#F59E0B"
-                            : "#22C55E",
+                            : "#EF4444",
                         }}
                       >
                         {contract.analysis.riskScore}

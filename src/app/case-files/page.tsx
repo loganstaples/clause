@@ -107,7 +107,7 @@ export default function CaseFilesPage() {
                   <div className="mt-4 flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
                       <span className="text-lg font-semibold text-[#FFFFFF]">{contract.analysis.riskScore}</span>
-                      <span className="text-[10px] uppercase tracking-wider text-[#5C5C5C]">Risk</span>
+                      <span className="text-[10px] uppercase tracking-wider text-[#5C5C5C]">Score</span>
                     </div>
                     <div className="h-4 w-px bg-[rgba(255,255,255,0.08)]" />
                     <div className="flex gap-2">

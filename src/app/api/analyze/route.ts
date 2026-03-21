@@ -15,7 +15,7 @@ For each flagged clause, provide:
 7. Suggested replacement language that would be more favorable to the small business owner
 
 Also provide:
-- An overall risk score from 0-100 (100 = extremely unfavorable)
+- An overall contract quality score from 0-100 (100 = excellent deal, very fair to the small business owner; 0 = extremely unfavorable). Score higher when terms are balanced and standard, lower when there are many unfavorable or risky clauses.
 - A one-sentence summary of the contract's overall fairness
 - Counts of critical, warning, and info-level clauses
 
