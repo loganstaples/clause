@@ -132,7 +132,7 @@ export default function CaseFileDocViewer({
               <p
                 key={i}
                 className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
-                style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+                style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
               >
                 <em className="text-[#F1F1F3]">{prefix}{title}</em>{" "}
                 {body}
@@ -143,7 +143,7 @@ export default function CaseFileDocViewer({
             <p
               key={i}
               className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
-              style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+              style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
             >
               <em className="text-[#F1F1F3]">{trimmed}</em>
             </p>
@@ -155,7 +155,7 @@ export default function CaseFileDocViewer({
         <p
           key={i}
           className="mb-4 text-base leading-[1.8] text-[#c0c4cc]"
-          style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
+          style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
         >
           {trimmed}
         </p>
