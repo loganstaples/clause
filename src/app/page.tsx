@@ -114,7 +114,7 @@ export default function Home() {
         {/* Templates + Recent Contracts side by side */}
         <div className="mt-10 flex gap-8">
           <TemplatesPanel onTemplateClick={loadDemo} />
-          <RecentContractsTable contracts={contracts} />
+          <RecentContractsTable contracts={contracts} onDemoClick={loadDemo} />
         </div>
       </main>
 

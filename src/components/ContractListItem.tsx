@@ -35,7 +35,7 @@ export default function ContractListItem({
       transition={{ duration: 0.3, delay: 0.3 + index * 0.06 }}
     >
       <Link
-        href={`/review/${contract.id}`}
+        href={`/case-files/${contract.id}`}
         className="flex items-center justify-between rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#12131A] px-5 py-4 transition-all duration-200 hover:border-[rgba(255,255,255,0.12)] hover:bg-[#151620]"
       >
         <div className="flex items-center gap-3">

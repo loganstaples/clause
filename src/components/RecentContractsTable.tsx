@@ -32,9 +32,10 @@ const DEMO_CONTRACTS = [
 
 interface RecentContractsTableProps {
   contracts: Contract[];
+  onDemoClick?: () => void;
 }
 
-export default function RecentContractsTable({ contracts }: RecentContractsTableProps) {
+export default function RecentContractsTable({ contracts, onDemoClick }: RecentContractsTableProps) {
   const hasRealContracts = contracts.length > 0;
 
   return (
@@ -96,7 +97,8 @@ export default function RecentContractsTable({ contracts }: RecentContractsTable
           DEMO_CONTRACTS.map((item, i) => (
             <div
               key={i}
-              className="grid grid-cols-[1fr_120px_100px_50px] items-center gap-4 border-b border-[rgba(255,255,255,0.04)] px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.02)] cursor-default"
+              onClick={onDemoClick}
+              className="grid grid-cols-[1fr_120px_100px_50px] items-center gap-4 border-b border-[rgba(255,255,255,0.04)] px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.02)] cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(59,130,246,0.1)]">
