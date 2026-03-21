@@ -4,57 +4,76 @@ import { useEffect, useState } from "react";
 
 interface RiskGaugeProps {
   score: number;
+  loading?: boolean;
 }
 
-export default function RiskGauge({ score }: RiskGaugeProps) {
+export default function RiskGauge({ score, loading }: RiskGaugeProps) {
   const [animatedScore, setAnimatedScore] = useState(0);
 
   useEffect(() => {
+    if (loading) return;
     const timer = setTimeout(() => setAnimatedScore(score), 100);
     return () => clearTimeout(timer);
-  }, [score]);
+  }, [score, loading]);
 
-  const circumference = 2 * Math.PI * 45;
+  const radius = 50;
+  const circumference = 2 * Math.PI * radius;
   const strokeDashoffset =
     circumference - (animatedScore / 100) * circumference;
 
   const color =
-    score >= 70 ? "#EF4444" : score >= 40 ? "#F59E0B" : "#22C55E";
+    score >= 70 ? "#ffb4ab" : score >= 40 ? "#F59E0B" : "#22C55E";
+
+  if (loading) {
+    return (
+      <div className="relative inline-flex h-28 w-28 shrink-0 items-center justify-center">
+        <svg className="h-28 w-28 -rotate-90 animate-pulse" viewBox="0 0 112 112">
+          <circle
+            cx="56"
+            cy="56"
+            r={radius}
+            fill="transparent"
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth="4"
+          />
+        </svg>
+        <div className="absolute flex items-center justify-center">
+          <div className="h-8 w-10 animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative inline-flex h-28 w-28 items-center justify-center">
-      <svg className="h-28 w-28 -rotate-90" viewBox="0 0 100 100">
+    <div className="relative inline-flex h-28 w-28 shrink-0 items-center justify-center">
+      <svg className="h-28 w-28 -rotate-90" viewBox="0 0 112 112">
         <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke="rgba(255,255,255,0.06)"
-          strokeWidth="6"
+          cx="56"
+          cy="56"
+          r={radius}
+          fill="transparent"
+          stroke="rgba(255,255,255,0.04)"
+          strokeWidth="4"
         />
         <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
+          cx="56"
+          cy="56"
+          r={radius}
+          fill="transparent"
           stroke={color}
-          strokeWidth="6"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           className="transition-all duration-1000 ease-out"
-          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
         />
       </svg>
-      <div className="absolute flex flex-col items-center">
+      <div className="absolute flex items-center justify-center">
         <span
-          className="text-2xl font-semibold"
-          style={{ color }}
+          className="text-4xl font-medium text-[#FFFFFF]"
+          style={{ fontFamily: "var(--font-newsreader), serif" }}
         >
           {animatedScore}
-        </span>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-[#5A5F6B]">
-          Risk
         </span>
       </div>
     </div>
