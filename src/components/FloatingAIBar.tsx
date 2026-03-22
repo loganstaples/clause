@@ -230,14 +230,19 @@ export default function FloatingAIBar({
     return int16;
   };
 
-  // Downsample from source rate to 16kHz
+  // Downsample from source rate to 16kHz with averaging filter
   const downsample = (buffer: Float32Array, fromRate: number): Float32Array => {
     if (fromRate === 16000) return buffer;
     const ratio = fromRate / 16000;
-    const newLength = Math.round(buffer.length / ratio);
+    const newLength = Math.floor(buffer.length / ratio);
     const result = new Float32Array(newLength);
     for (let i = 0; i < newLength; i++) {
-      result[i] = buffer[Math.round(i * ratio)];
+      const center = i * ratio;
+      const start = Math.floor(center);
+      const end = Math.min(Math.ceil(center + ratio), buffer.length);
+      let sum = 0;
+      for (let j = start; j < end; j++) sum += buffer[j];
+      result[i] = sum / (end - start);
     }
     return result;
   };
@@ -277,7 +282,7 @@ export default function FloatingAIBar({
     source.connect(analyser);       // for waveform visualization
     source.connect(audioCtx.destination); // for audio output (NOT through analyser)
 
-    const startTime = Math.max(audioCtx.currentTime + 0.05, playbackTimeRef.current);
+    const startTime = Math.max(audioCtx.currentTime + 0.01, playbackTimeRef.current);
     source.start(startTime);
     playbackTimeRef.current = startTime + audioBuffer.duration;
 
@@ -312,7 +317,7 @@ export default function FloatingAIBar({
       micSource.connect(analyser); // waveform visualization
 
       // 4. Set up ScriptProcessor for PCM capture
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
       micSource.connect(processor);
       const silentGain = audioCtx.createGain();
