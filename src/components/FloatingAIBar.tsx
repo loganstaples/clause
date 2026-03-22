@@ -142,8 +142,16 @@ export default function FloatingAIBar({
     if (!ctx) return;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    const barCount = 48;
-    const barGap = 2;
+    const barCount = 32;
+    const barGap = 3;
+    const barWidth = 3;
+    const totalWidth = barCount * (barWidth + barGap) - barGap;
+
+    // Bell curve weights — center bars get most energy
+    const weights = Array.from({ length: barCount }, (_, i) => {
+      const t = (i / (barCount - 1)) * 2 - 1; // -1 to 1
+      return Math.exp(-t * t * 2.5);
+    });
 
     const draw = () => {
       analyser.getByteFrequencyData(dataArray);
@@ -151,18 +159,22 @@ export default function FloatingAIBar({
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
 
-      const barWidth = (width - (barCount - 1) * barGap) / barCount;
-      const samplesPerBar = Math.floor(bufferLength / barCount);
+      // Compute overall energy from the frequency data
+      let energy = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        energy += dataArray[i];
+      }
+      energy = energy / bufferLength / 255; // 0-1
+
+      const offsetX = (width - totalWidth) / 2;
 
       for (let i = 0; i < barCount; i++) {
-        let sum = 0;
-        for (let j = 0; j < samplesPerBar; j++) {
-          sum += dataArray[i * samplesPerBar + j];
-        }
-        const avg = sum / samplesPerBar / 255;
-        const barHeight = Math.max(2, avg * height * 0.9);
+        // Each bar height = energy * bell curve weight + small random jitter
+        const w = weights[i];
+        const jitter = 0.85 + Math.random() * 0.3;
+        const barHeight = Math.max(2, energy * w * jitter * height * 1.6);
 
-        const x = i * (barWidth + barGap);
+        const x = offsetX + i * (barWidth + barGap);
         const y = (height - barHeight) / 2;
 
         ctx.fillStyle = color;
