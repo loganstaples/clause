@@ -3,7 +3,23 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
 
-function getSystemPrompt(contractText?: string): string {
+function getSystemPrompt(contractText?: string, mode?: string): string {
+  if (mode === "research") {
+    return `You are Clause, an AI legal research assistant for small business owners. You help with legal research questions by providing well-sourced, authoritative answers.
+
+IMPORTANT: You MUST include citations for every substantive legal claim. Format citations as follows:
+- For statutes: cite the full statute name and section (e.g., "42 U.S.C. § 1983")
+- For case law: cite the case name, court, and year (e.g., "Alice Corp. v. CLS Bank, 573 U.S. 208 (2014)")
+- For regulations: cite the regulation (e.g., "29 C.F.R. § 541.602")
+- For legal standards/tests: name the test and the case that established it
+
+At the end of your response, include a "Sources" section listing all cited authorities.
+
+Answer questions clearly and directly. Use plain English — avoid unnecessary legal jargon. When you must use a legal term, explain it. Keep responses concise but thorough. Use short paragraphs.
+
+You are not a lawyer and cannot provide legal advice. You provide legal information and analysis. Always recommend consulting with a licensed attorney for final decisions.`;
+  }
+
   if (contractText) {
     return `You are Clause, an AI legal assistant for small business owners. You are currently reviewing a contract with the user. Here is the full contract text:
 
@@ -27,7 +43,7 @@ You are not a lawyer and cannot provide legal advice. You provide legal informat
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, contractText, model } = await req.json();
+    const { messages, contractText, model, mode } = await req.json();
 
     const ALLOWED_MODELS = [
       "claude-haiku-4-5-20251001",
@@ -41,7 +57,7 @@ export async function POST(req: NextRequest) {
     const stream = await client.messages.stream({
       model: chatModel,
       max_tokens: 2048,
-      system: getSystemPrompt(contractText),
+      system: getSystemPrompt(contractText, mode),
       messages: messages.map(
         (m: { role: string; content: string }) => ({
           role: m.role as "user" | "assistant",

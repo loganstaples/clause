@@ -120,6 +120,7 @@ export default function ResearchPage() {
         chatHistory={chatHistory}
         onChatUpdate={setChatHistory}
         placeholder="Ask a legal research question..."
+        mode="research"
       />
     </div>
   );

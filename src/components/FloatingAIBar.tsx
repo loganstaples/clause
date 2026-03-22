@@ -15,6 +15,7 @@ interface FloatingAIBarProps {
   onClearContext?: () => void;
   onFixAll?: () => void;
   onExport?: () => void;
+  mode?: "default" | "research";
 }
 
 type BorderState = "idle" | "settled" | "leaving";
@@ -37,6 +38,7 @@ export default function FloatingAIBar({
   onClearContext,
   onFixAll,
   onExport,
+  mode = "default",
 }: FloatingAIBarProps) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -83,6 +85,7 @@ export default function FloatingAIBar({
   const playbackSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const toolCallPendingRef = useRef(false);
   const aiSpeakingRef = useRef(false);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -91,7 +94,7 @@ export default function FloatingAIBar({
   useEffect(() => { stateRef.current = borderState; }, [borderState]);
 
   const clearTimers = () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; };
-  useEffect(() => () => clearTimers(), []);
+  useEffect(() => () => { clearTimers(); chatAbortRef.current?.abort(); }, []);
 
   // Reset typewriter when answer is cleared (new question)
   useEffect(() => {
@@ -667,11 +670,17 @@ export default function FloatingAIBar({
 
     let fullAnswer = "";
 
+    // Cancel any previous in-flight request
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages, contractText, model: selectedModel }),
+        body: JSON.stringify({ messages: newMessages, contractText, model: selectedModel, mode }),
+        signal: abortController.signal,
       });
       if (!response.ok) throw new Error("Chat request failed");
 
@@ -681,14 +690,15 @@ export default function FloatingAIBar({
       onChatUpdate([...newMessages, assistantMessage]);
 
       if (reader) {
-        while (true) {
+        let streamDone = false;
+        while (!streamDone) {
           const { done, value } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value);
           for (const line of chunk.split("\n")) {
             if (line.startsWith("data: ")) {
               const data = line.slice(6);
-              if (data === "[DONE]") break;
+              if (data === "[DONE]") { streamDone = true; break; }
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.text) {
@@ -712,7 +722,7 @@ export default function FloatingAIBar({
       setBorderSpin(false);
       if (fullAnswer) fetchFollowups(text, fullAnswer);
     }
-  }, [input, isStreaming, chatHistory, onChatUpdate, contractText, selectedModel, fetchFollowups, activeParagraph]);
+  }, [input, isStreaming, chatHistory, onChatUpdate, contractText, selectedModel, fetchFollowups, activeParagraph, mode]);
 
   const handleFollowupClick = useCallback((followup: string) => {
     handleSend(followup);
@@ -903,32 +913,76 @@ export default function FloatingAIBar({
                         <div className="flex-1 min-w-0 min-h-[120px]">
                           {answer ? (
                             <div className="ai-markdown text-sm leading-[1.75] text-[#cccccc]">
-                              <ReactMarkdown
-                                components={{
-                                  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                                  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-                                  em: ({ children }) => <em className="italic text-[#aaaaaa]">{children}</em>,
-                                  ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
-                                  ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
-                                  li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
-                                  h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-white first:mt-0">{children}</h1>,
-                                  h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-white first:mt-0">{children}</h2>,
-                                  h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-white first:mt-0">{children}</h3>,
-                                  code: ({ children, className }) => {
-                                    const isBlock = className?.includes("language-");
-                                    if (isBlock) {
-                                      return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#cccccc] overflow-x-auto whitespace-pre">{children}</code>;
-                                    }
-                                    return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d4]">{children}</code>;
-                                  },
-                                  pre: ({ children }) => <>{children}</>,
-                                  blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(240,235,227,0.3)] pl-4 text-[#999999] italic">{children}</blockquote>,
-                                  hr: () => <hr className="my-4 border-[rgba(255,255,255,0.06)]" />,
-                                  a: ({ children, href }) => <a href={href} className="text-[#F0EBE3] underline underline-offset-2 hover:text-[#F5EFE0]" target="_blank" rel="noopener noreferrer">{children}</a>,
-                                }}
-                              >
-                                {displayedAnswer}
-                              </ReactMarkdown>
+                              {(() => {
+                                // Split sources section out for special rendering
+                                const sourcesMatch = displayedAnswer.match(/\n#+\s*Sources?\s*\n/i);
+                                const bodyText = sourcesMatch ? displayedAnswer.substring(0, sourcesMatch.index) : displayedAnswer;
+                                const sourcesText = sourcesMatch ? displayedAnswer.substring(sourcesMatch.index! + sourcesMatch[0].length) : null;
+
+                                // Parse individual sources from bullet/numbered list
+                                const sourceItems = sourcesText
+                                  ? sourcesText
+                                      .split(/\n/)
+                                      .map((line) => line.replace(/^[\s]*[-–•*]\s*|^[\s]*\d+\.\s*/, "").trim())
+                                      .filter((line) => line.length > 0)
+                                  : [];
+
+                                return (
+                                  <>
+                                    <ReactMarkdown
+                                      components={{
+                                        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                                        strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                        em: ({ children }) => <em className="italic text-[#aaaaaa]">{children}</em>,
+                                        ul: ({ children }) => <ul className="mb-3 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
+                                        ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
+                                        li: ({ children }) => <li className="text-[#cccccc]">{children}</li>,
+                                        h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-white first:mt-0">{children}</h1>,
+                                        h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-bold text-white first:mt-0">{children}</h2>,
+                                        h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold text-white first:mt-0">{children}</h3>,
+                                        code: ({ children, className }) => {
+                                          const isBlock = className?.includes("language-");
+                                          if (isBlock) {
+                                            return <code className="block my-3 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] px-4 py-3 text-xs font-mono text-[#cccccc] overflow-x-auto whitespace-pre">{children}</code>;
+                                          }
+                                          return <code className="rounded bg-[rgba(255,255,255,0.06)] px-1.5 py-0.5 text-xs font-mono text-[#d4d4d4]">{children}</code>;
+                                        },
+                                        pre: ({ children }) => <>{children}</>,
+                                        blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-[rgba(240,235,227,0.3)] pl-4 text-[#999999] italic">{children}</blockquote>,
+                                        hr: () => <hr className="my-4 border-[rgba(255,255,255,0.06)]" />,
+                                        a: ({ children, href }) => <a href={href} className="text-[#F0EBE3] underline underline-offset-2 hover:text-[#F5EFE0]" target="_blank" rel="noopener noreferrer">{children}</a>,
+                                      }}
+                                    >
+                                      {bodyText}
+                                    </ReactMarkdown>
+
+                                    {sourceItems.length > 0 && (
+                                      <div className="mt-4">
+                                        <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-[#5C5C5C]">Sources</h3>
+                                        <div className="flex flex-wrap gap-2">
+                                          {sourceItems.map((source, idx) => (
+                                            <div
+                                              key={idx}
+                                              className="rounded-lg border border-[rgba(255,255,255,0.08)] px-3 py-2 text-xs leading-relaxed text-[#cccccc]"
+                                              style={{
+                                                background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+                                                backdropFilter: "blur(12px)",
+                                                WebkitBackdropFilter: "blur(12px)",
+                                              }}
+                                            >
+                                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#F0EBE3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 inline-block -mt-0.5 opacity-50">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                                <polyline points="14 2 14 8 20 8" />
+                                              </svg>
+                                              {source}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {(isStreaming || isTypewriting) && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-[#F0EBE3]" />}
                             </div>
                           ) : (
