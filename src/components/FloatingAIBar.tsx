@@ -142,9 +142,9 @@ export default function FloatingAIBar({
     if (!ctx) return;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    const barCount = 28;
+    const barCount = 40;
     const barGap = 3;
-    const barWidth = 3;
+    const barWidth = 5;
     const totalWidth = barCount * (barWidth + barGap) - barGap;
 
     // Smoothed values for each bar (for fluid animation)
@@ -984,16 +984,13 @@ export default function FloatingAIBar({
                     <span className="text-xs text-white/40">Connecting...</span>
                   </div>
                 ) : (
-                  <>
-                    <canvas
-                      ref={canvasRef}
-                      width={600}
-                      height={48}
-                      className="w-full"
-                      style={{ height: "48px" }}
-                    />
-                    <span className="text-[10px] text-white/25 mt-1">Tap to end</span>
-                  </>
+                  <canvas
+                    ref={canvasRef}
+                    width={600}
+                    height={48}
+                    className="w-full"
+                    style={{ height: "48px" }}
+                  />
                 )}
               </div>
             ) : (
