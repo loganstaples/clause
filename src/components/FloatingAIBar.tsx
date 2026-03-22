@@ -16,7 +16,7 @@ interface FloatingAIBarProps {
 }
 
 type BorderState = "idle" | "settled" | "leaving";
-type VoiceMode = "idle" | "recording" | "processing" | "playing" | "error";
+type VoiceMode = "idle" | "connecting" | "active" | "error";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -69,12 +69,13 @@ export default function FloatingAIBar({
 
   // Voice mode refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const playbackTimeRef = useRef<number>(0);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -129,6 +130,8 @@ export default function FloatingAIBar({
   }, [followups, followupsLoading]);
 
   // ===== VOICE MODE LOGIC =====
+  const GEMINI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+
   const drawWaveform = useCallback((analyser: AnalyserNode, canvas: HTMLCanvasElement, color: string) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -160,123 +163,228 @@ export default function FloatingAIBar({
 
   const cleanupVoice = useCallback(() => {
     cancelAnimationFrame(animFrameRef.current);
+    processorRef.current?.disconnect();
+    processorRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+    wsRef.current = null;
     audioContextRef.current?.close().catch(() => {});
     audioContextRef.current = null;
     analyserRef.current = null;
-    mediaRecorderRef.current = null;
+    playbackTimeRef.current = 0;
   }, []);
 
-  const playAudioResponse = useCallback(async (wavBlob: Blob) => {
-    setVoiceMode("playing");
-    try {
-      const audioCtx = new AudioContext();
-      audioContextRef.current = audioCtx;
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyserRef.current = analyser;
-      const arrayBuffer = await wavBlob.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      const source = audioCtx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
-      source.start();
-      if (canvasRef.current) drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
-      source.onended = () => {
-        cancelAnimationFrame(animFrameRef.current);
-        audioCtx.close().catch(() => {});
-        audioContextRef.current = null;
-        setVoiceMode("idle");
-      };
-    } catch {
-      cleanupVoice();
-      setVoiceMode("idle");
-    }
-  }, [drawWaveform, cleanupVoice]);
+  const endVoiceSession = useCallback(() => {
+    cleanupVoice();
+    setVoiceMode("idle");
+  }, [cleanupVoice]);
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
+  // Convert float32 audio to int16 PCM
+  const float32ToInt16 = (float32: Float32Array): Int16Array => {
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
-    cancelAnimationFrame(animFrameRef.current);
+    return int16;
+  };
+
+  // Downsample from source rate to 16kHz
+  const downsample = (buffer: Float32Array, fromRate: number): Float32Array => {
+    if (fromRate === 16000) return buffer;
+    const ratio = fromRate / 16000;
+    const newLength = Math.round(buffer.length / ratio);
+    const result = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      result[i] = buffer[Math.round(i * ratio)];
+    }
+    return result;
+  };
+
+  // Convert ArrayBuffer to base64
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  };
+
+  // Play incoming PCM audio chunk in real-time
+  const playPcmChunk = useCallback((base64Data: string) => {
+    const audioCtx = audioContextRef.current;
+    const analyser = analyserRef.current;
+    if (!audioCtx || !analyser) return;
+
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768;
+    }
+
+    const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+    audioBuffer.getChannelData(0).set(float32);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    const startTime = Math.max(audioCtx.currentTime + 0.05, playbackTimeRef.current);
+    source.start(startTime);
+    playbackTimeRef.current = startTime + audioBuffer.duration;
   }, []);
 
   const handleMicClick = useCallback(async () => {
     if (voiceMode !== "idle") return;
+    setVoiceMode("connecting");
+
     try {
+      // 1. Get API key
+      const tokenRes = await fetch("/api/voice");
+      const { key } = await tokenRes.json();
+      if (!key) throw new Error("No API key");
+
+      // 2. Get mic stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
+      // 3. Set up AudioContext + analyser
       const audioCtx = new AudioContext();
       audioContextRef.current = audioCtx;
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
       analyserRef.current = analyser;
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyser);
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
+      const micSource = audioCtx.createMediaStreamSource(stream);
+      micSource.connect(analyser); // waveform visualization
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      // 4. Set up ScriptProcessor for PCM capture
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+      micSource.connect(processor);
+      const silentGain = audioCtx.createGain();
+      silentGain.gain.value = 0;
+      processor.connect(silentGain);
+      silentGain.connect(audioCtx.destination);
+
+      // 5. Open WebSocket to Gemini Live API
+      const ws = new WebSocket(`${GEMINI_WS_URL}?key=${key}`);
+      wsRef.current = ws;
+
+      const sysInstruction = contractText
+        ? `You are Clause, an AI legal assistant for small business owners. You are reviewing a contract. Here is the contract:\n\n${contractText}\n\nAnswer questions clearly in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`
+        : `You are Clause, an AI legal assistant for small business owners. Help understand legal concepts and contracts in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`;
+
+      ws.onopen = () => {
+        // Send setup message
+        ws.send(JSON.stringify({
+          setup: {
+            model: "models/gemini-2.5-flash-preview-native-audio-dialog",
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: "Kore" },
+                },
+              },
+            },
+            systemInstruction: {
+              parts: [{ text: sysInstruction }],
+            },
+          },
+        }));
       };
 
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        cancelAnimationFrame(animFrameRef.current);
-        audioCtx.close().catch(() => {});
-        audioContextRef.current = null;
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-        if (audioBlob.size === 0) { setVoiceMode("idle"); return; }
-
-        setVoiceMode("processing");
+      ws.onmessage = (event) => {
         try {
-          const formData = new FormData();
-          formData.append("audio", audioBlob);
-          if (contractText) formData.append("contractText", contractText);
-          const res = await fetch("/api/voice", { method: "POST", body: formData });
-          if (!res.ok) throw new Error("Voice API error");
-          const wavBlob = await res.blob();
-          await playAudioResponse(wavBlob);
-        } catch {
-          setVoiceError("Something went wrong");
-          setVoiceMode("error");
-          setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
+          const msg = JSON.parse(event.data);
+
+          // Setup complete — start streaming mic audio
+          if (msg.setupComplete) {
+            setVoiceMode("active");
+            playbackTimeRef.current = 0;
+
+            // Start waveform drawing
+            if (canvasRef.current) {
+              drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+            }
+
+            // Start sending mic audio
+            const sampleRate = audioCtx.sampleRate;
+            processor.onaudioprocess = (e) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              const inputData = e.inputBuffer.getChannelData(0);
+              const downsampled = downsample(inputData, sampleRate);
+              const pcm = float32ToInt16(downsampled);
+              const base64 = arrayBufferToBase64(pcm.buffer as ArrayBuffer);
+
+              ws.send(JSON.stringify({
+                realtimeInput: {
+                  mediaChunks: [{
+                    data: base64,
+                    mimeType: "audio/pcm;rate=16000",
+                  }],
+                },
+              }));
+            };
+            return;
+          }
+
+          // Audio response chunks
+          if (msg.serverContent?.modelTurn?.parts) {
+            for (const part of msg.serverContent.modelTurn.parts) {
+              if (part.inlineData?.data) {
+                playPcmChunk(part.inlineData.data);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("WS message parse error:", e);
         }
       };
 
-      recorder.start(250);
-      setVoiceMode("recording");
+      ws.onerror = () => {
+        setVoiceError("Connection error");
+        setVoiceMode("error");
+        cleanupVoice();
+        setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
+      };
 
-      if (canvasRef.current) drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
-
-      // Auto-stop after 60s
-      setTimeout(() => {
-        if (mediaRecorderRef.current?.state === "recording") stopRecording();
-      }, 60000);
+      ws.onclose = () => {
+        // Only set idle if we haven't already set error
+        setVoiceMode((prev) => prev === "error" ? prev : "idle");
+        cancelAnimationFrame(animFrameRef.current);
+        processorRef.current?.disconnect();
+        processorRef.current = null;
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+        audioContextRef.current?.close().catch(() => {});
+        audioContextRef.current = null;
+      };
     } catch {
       setVoiceError("Microphone access denied");
       setVoiceMode("error");
+      cleanupVoice();
       setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
     }
-  }, [voiceMode, contractText, drawWaveform, stopRecording, playAudioResponse]);
+  }, [voiceMode, contractText, drawWaveform, cleanupVoice, playPcmChunk]);
 
   // Close on Escape, open on /
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (voiceMode === "recording") {
-          stopRecording();
-          cleanupVoice();
-          setVoiceMode("idle");
+        if (voiceMode !== "idle") {
+          endVoiceSession();
           return;
         }
         if (isExpanded && !isStreaming) {
@@ -295,7 +403,7 @@ export default function FloatingAIBar({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isExpanded, isStreaming, voiceMode, stopRecording, cleanupVoice]);
+  }, [isExpanded, isStreaming, voiceMode, endVoiceSession]);
 
   // Click outside to collapse
   useEffect(() => {
@@ -511,7 +619,7 @@ export default function FloatingAIBar({
       ref={panelRef}
       className="fixed bottom-6 z-50"
       style={{
-        width: isFocused || isExpanded || isStreaming ? "min(720px, 90vw)" : "min(400px, 90vw)",
+        width: isFocused || isExpanded || isStreaming || isVoiceActive ? "min(720px, 90vw)" : "min(400px, 90vw)",
         left: "50vw",
         transform: "translateX(-50%)",
         transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -762,20 +870,20 @@ export default function FloatingAIBar({
             {isVoiceActive ? (
               /* ===== VOICE MODE UI ===== */
               <div
-                onClick={() => { if (voiceMode === "recording") stopRecording(); }}
-                className="flex flex-col items-center justify-center"
-                style={{ minHeight: "56px", cursor: voiceMode === "recording" ? "pointer" : "default" }}
+                onClick={endVoiceSession}
+                className="flex flex-col items-center justify-center cursor-pointer"
+                style={{ minHeight: "56px" }}
               >
                 {voiceMode === "error" ? (
                   <span className="text-xs text-red-400">{voiceError}</span>
-                ) : voiceMode === "processing" ? (
+                ) : voiceMode === "connecting" ? (
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
                       <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "150ms" }} />
                       <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "300ms" }} />
                     </div>
-                    <span className="text-xs text-blue-300/60">Processing...</span>
+                    <span className="text-xs text-blue-300/60">Connecting...</span>
                   </div>
                 ) : (
                   <>
@@ -786,9 +894,7 @@ export default function FloatingAIBar({
                       className="w-full"
                       style={{ height: "48px" }}
                     />
-                    {voiceMode === "recording" && (
-                      <span className="text-[10px] text-blue-300/40 mt-1">Tap anywhere to stop</span>
-                    )}
+                    <span className="text-[10px] text-blue-300/40 mt-1">Tap to end</span>
                   </>
                 )}
               </div>
@@ -843,6 +949,7 @@ export default function FloatingAIBar({
                   <div className="flex items-center gap-1.5">
                     {/* Mic button */}
                     <button
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={handleMicClick}
                       disabled={isStreaming}
                       className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
