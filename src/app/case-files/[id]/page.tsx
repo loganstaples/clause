@@ -27,6 +27,7 @@ export default function CaseFilePage({
   const [revisionClause, setRevisionClause] = useState<Clause | null>(null);
   const [originalAnalysis, setOriginalAnalysis] = useState<{ score: number; clauses: Clause[] } | null>(null);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+  const [resummarizing, setResummarizing] = useState(false);
 
   useEffect(() => {
     const c = getContract(id);
@@ -73,9 +74,41 @@ export default function CaseFilePage({
   const handleClauseClick = useCallback((clauseId: string) => {
     setActiveClauseId(clauseId);
 
+    // Smooth scroll helper
+    const smoothScroll = (container: HTMLElement, target: number) => {
+      const start = container.scrollTop;
+      const distance = target - start;
+      const duration = 250;
+      const startTime = performance.now();
+      const step = (now: number) => {
+        const t = Math.min((now - startTime) / duration, 1);
+        const ease = t * (2 - t);
+        container.scrollTop = start + distance * ease;
+        if (t < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    // Scroll the clause card into view in the analysis panel
+    const cardEl = document.getElementById(`clause-card-${clauseId}`);
+    if (cardEl) {
+      const scrollContainer = cardEl.closest(".overflow-y-auto") as HTMLElement | null;
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const cardRect = cardEl.getBoundingClientRect();
+        smoothScroll(scrollContainer, cardRect.top - containerRect.top + scrollContainer.scrollTop - 16);
+      }
+    }
+
+    // Scroll the clause text into view in the doc viewer
     const textEl = document.getElementById(`clause-text-${clauseId}`);
     if (textEl) {
-      textEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      const scrollContainer = textEl.closest(".overflow-y-auto") as HTMLElement | null;
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const textRect = textEl.getBoundingClientRect();
+        smoothScroll(scrollContainer, textRect.top - containerRect.top + scrollContainer.scrollTop - 16);
+      }
     }
 
     setTimeout(() => setActiveClauseId(null), 3000);
@@ -198,15 +231,44 @@ export default function CaseFilePage({
         : c
     );
     const orig = originalAnalysis ?? { score: contract.analysis.riskScore, clauses: contract.analysis.clauses };
+    const newScore = recalcScore(orig.score, orig.clauses, updatedClauses);
     const updatedAnalysis = {
       ...contract.analysis,
       clauses: updatedClauses,
-      riskScore: recalcScore(orig.score, orig.clauses, updatedClauses),
+      riskScore: newScore,
     };
 
     const updated = { ...contract, rawText: newRawText, analysis: updatedAnalysis };
     setContract(updated);
     saveContract(updated);
+
+    // Regenerate summary to reflect the revised contract
+    setResummarizing(true);
+    fetch("/api/resummarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contractText: newRawText, riskScore: newScore }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.summary) {
+          setContract((prev) => {
+            if (!prev?.analysis) return prev;
+            const withSummary = {
+              ...prev,
+              analysis: { ...prev.analysis, summary: data.summary },
+            };
+            saveContract(withSummary);
+            return withSummary;
+          });
+        }
+      })
+      .catch(() => {
+        // Keep existing summary on failure
+      })
+      .finally(() => {
+        setResummarizing(false);
+      });
   }, [contract, originalAnalysis]);
 
   if (!contract) {
@@ -257,6 +319,7 @@ export default function CaseFilePage({
             onClauseClick={handleClauseClick}
             onRevise={setRevisionClause}
             onAskAI={(clause) => setSelectedParagraph(clause.originalText)}
+            resummarizing={resummarizing}
           />
         </div>
 

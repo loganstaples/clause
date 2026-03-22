@@ -367,7 +367,7 @@ export default function CaseFileDocViewer({
         ) : (
           <>
             <h1
-              className="text-4xl font-semibold leading-tight text-[#FFFFFF]"
+              className="text-4xl font-medium leading-tight tracking-wide text-[#FFFFFF]"
               style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
             >
               {displayName}
@@ -404,16 +404,41 @@ export default function CaseFileDocViewer({
                     {tabLabel}
                   </span>
                 </div>
-                {/* Highlighted body */}
-                <div
-                  id={`clause-text-${segment.clauseId}`}
-                  className={`cursor-pointer rounded-r-lg rounded-bl-lg border-l-3 pl-5 py-2 transition-all duration-200 ${
-                    borderColors[segment.severity!]
-                  } ${isActive ? "ring-1 ring-[rgba(240,235,227,0.3)]" : ""}`}
-                  onClick={() => onClauseClick(segment.clauseId!)}
-                >
-                  {renderText(segment.text)}
-                </div>
+                {/* Split leading section title out of the highlighted box */}
+                {(() => {
+                  const trimmed = segment.text.trimStart();
+                  // Match patterns like "1.2 Annual Escalation." or "Section 4.2: Title" at the start
+                  const titleMatch = trimmed.match(
+                    /^((?:\d+\.\s*\d+\s+[A-Z][^.\n]*\.|Section\s+[\d.]+[:\s]*[A-Z][^.\n]*\.))\s*/i
+                  );
+                  const titleText = titleMatch ? titleMatch[1].trim() : null;
+                  const bodyText = titleMatch ? trimmed.slice(titleMatch[0].length) : segment.text;
+
+                  return (
+                    <>
+                      {titleText && (
+                        <p
+                          className="mb-2 text-base leading-[1.8] text-[#cccccc]"
+                          style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
+                        >
+                          <em className="text-[#FFFFFF]">{titleText}</em>
+                        </p>
+                      )}
+                      <div
+                        id={`clause-text-${segment.clauseId}`}
+                        className={`cursor-pointer rounded-r-lg rounded-bl-lg border-l-3 pl-5 py-2 transition-all duration-200 ${
+                          borderColors[segment.severity!]
+                        } ${isActive ? "ring-1 ring-[rgba(240,235,227,0.3)]" : ""}`}
+                        onClick={() => segment.severity === "info"
+                          ? onParagraphClick?.(segment.text.trim())
+                          : onClauseClick(segment.clauseId!)
+                        }
+                      >
+                        {renderText(bodyText)}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             );
           }

@@ -19,6 +19,7 @@ interface CaseFileAnalysisPanelProps {
   onClauseClick: (clauseId: string) => void;
   onRevise?: (clause: Clause) => void;
   onAskAI?: (clause: Clause) => void;
+  resummarizing?: boolean;
 }
 
 function SeverityBadge({
@@ -248,6 +249,7 @@ export default function CaseFileAnalysisPanel({
   onClauseClick,
   onRevise,
   onAskAI,
+  resummarizing,
 }: CaseFileAnalysisPanelProps) {
   // Error state
   if (error && !analysis) {
@@ -292,12 +294,15 @@ export default function CaseFileAnalysisPanel({
         return order[a.severity] - order[b.severity];
       });
 
-  // Compute counts from actual clauses, not the model's predictions
+  // Compute counts from all clauses (including info for the header badges)
   const counts = {
     critical: displayClauses.filter((c) => c.severity === "critical").length,
     warning: displayClauses.filter((c) => c.severity === "warning").length,
     info: displayClauses.filter((c) => c.severity === "info").length,
   };
+
+  // Only show critical/warning cards in the panel
+  const actionableClauses = displayClauses.filter((c) => c.severity !== "info");
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -319,9 +324,16 @@ export default function CaseFileAnalysisPanel({
                 <SeverityBadge count={counts.info} label="Standard" color="#22C55E" bg="rgba(34, 197, 94, 0.1)" />
               )}
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-[#999999]">
-              {header.summary}
-            </p>
+            {resummarizing ? (
+              <div className="mt-3 space-y-2">
+                <div className="h-4 w-full animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+                <div className="h-4 w-3/4 animate-pulse rounded bg-[rgba(255,255,255,0.06)]" />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-relaxed text-[#999999]">
+                {header.summary}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -330,7 +342,7 @@ export default function CaseFileAnalysisPanel({
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="flex flex-col gap-5">
           <AnimatePresence mode="popLayout">
-            {displayClauses.map((clause) => (
+            {actionableClauses.map((clause) => (
               <motion.div
                 key={clause.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -347,6 +359,29 @@ export default function CaseFileAnalysisPanel({
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {/* All-clear state when no actionable clauses */}
+          {!isStreaming && actionableClauses.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-full"
+                style={{
+                  background: "rgba(34, 197, 94, 0.10)",
+                  border: "1px solid rgba(34, 197, 94, 0.20)",
+                }}
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="mt-4 text-sm font-semibold text-[#CCCCCC]">
+                All clear
+              </p>
+              <p className="mt-1 text-xs text-[#5C5C5C]">
+                No issues found that need attention.
+              </p>
+            </div>
+          )}
 
           {/* Streaming indicator */}
           {isStreaming && (

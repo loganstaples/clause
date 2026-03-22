@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Contract } from "@/lib/types";
 
@@ -12,6 +13,7 @@ interface CaseFilesTopBarProps {
 }
 
 export default function CaseFilesTopBar({ contract, isLoadingTitle, onFixAll, issueCount, onExport }: CaseFilesTopBarProps) {
+  const router = useRouter();
   // Derive a display title: "COMMERCIAL LEASE — 123 MAIN ST" style
   const displayTitle = contract.name
     .replace(/_/g, " ")
@@ -21,15 +23,15 @@ export default function CaseFilesTopBar({ contract, isLoadingTitle, onFixAll, is
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-[rgba(255,255,255,0.06)] bg-[#050505] px-5">
       {/* Left: back arrow + logo */}
       <div className="flex items-center gap-4">
-        <Link
-          href="/"
+        <button
+          onClick={() => router.back()}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-[#999999] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[#FFFFFF]"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
           </svg>
-        </Link>
+        </button>
         <Link
           href="/"
           className="text-lg font-bold tracking-tight text-[#FFFFFF]"

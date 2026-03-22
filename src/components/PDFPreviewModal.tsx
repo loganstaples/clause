@@ -25,10 +25,10 @@ export default function PDFPreviewModal({
 
   // Generate PDF blob
   useEffect(() => {
-    const url = generatePDFBlobUrl(contract);
+    const url = generatePDFBlobUrl(contract, originalClauses);
     setPdfUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [contract]);
+  }, [contract, originalClauses]);
 
   // Identify revised clauses by diffing original vs current — these are the
   // ones the user explicitly chose to revise. We use the ORIGINAL clause data
@@ -58,29 +58,17 @@ export default function PDFPreviewModal({
         return;
       }
 
-      const revisedDetails = revisedClauses
-        .map((c) => {
-          return `Clause: "${c.title}" (${c.location})
-Concern: ${c.explanation}
-Original language: "${c.originalText.slice(0, 300)}${c.originalText.length > 300 ? "..." : ""}"
-What we changed it to: "${c.suggestedReplacement.slice(0, 300)}${c.suggestedReplacement.length > 300 ? "..." : ""}"`;
-        })
-        .join("\n\n");
+      const clauseTitles = revisedClauses.map((c) => c.title).join(", ");
 
-      const prompt = `Write a professional email to the other party regarding the contract "${contractTitle}". The sender has reviewed the contract and is requesting changes to specific clauses. For each one, articulate the concern clearly and explain why the proposed revision is more reasonable and balanced.
-
-Here are the clauses the sender chose to revise, along with their concerns and the proposed new language:
-
-${revisedDetails}
+      const prompt = `Write a brief, professional email to the other party regarding the contract "${contractTitle}". The sender has reviewed the contract and made revisions to the following clauses: ${clauseTitles}.
 
 Guidelines:
-- Write from the perspective of the person who reviewed the contract and is requesting these changes
-- For each revised clause, clearly explain the concern and why the change is necessary — use plain language, not legalese
-- Note that a revised version of the contract is attached reflecting these changes
-- Request that the counterparty review and confirm acceptance of the proposed revisions
-- Professional but direct tone — be confident, not apologetic
-- Keep it concise but thorough — each concern should be clearly articulated
-- Use markdown: **bold** for clause names/section references, bullet points for listing multiple changes
+- Keep it short — 3-5 sentences max
+- Mention that the attached redlined version reflects the proposed changes
+- Briefly note that ${revisedClauses.length} clause${revisedClauses.length > 1 ? "s were" : " was"} revised, but do NOT explain each concern in detail — the redline speaks for itself
+- Request that the counterparty review the attached redline and confirm acceptance
+- Professional but direct tone
+- Use markdown: **bold** for the contract name
 - Do NOT include a subject line — start with the salutation
 - End with a professional sign-off`;
 
@@ -177,11 +165,11 @@ Guidelines:
             className="text-base font-semibold text-white"
             style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
           >
-            Export Preview
+            {revisedClauses.length > 0 ? "Redline Preview" : "Export Preview"}
           </h2>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => downloadContractPDF(contract)}
+              onClick={() => downloadContractPDF(contract, originalClauses)}
               className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
               style={{ background: "#F0EBE3", color: "#050505" }}
             >
