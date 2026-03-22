@@ -317,11 +317,13 @@ export default function FloatingAIBar({
       };
 
       ws.onopen = () => {
-        console.log("[Voice] WebSocket connected, sending config...");
+        console.log("[Voice] WebSocket connected, sending setup...");
         ws.send(JSON.stringify({
-          config: {
+          setup: {
             model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
-            responseModalities: ["AUDIO"],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+            },
             systemInstruction: {
               parts: [{ text: sysInstruction }],
             },
