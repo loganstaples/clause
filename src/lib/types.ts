@@ -37,3 +37,9 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+export interface Case {
+  id: string;
+  name: string;
+  contractIds: string[];
+}
