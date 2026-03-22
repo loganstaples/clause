@@ -316,10 +316,6 @@ export default function FloatingAIBar({
         setVoiceMode("active");
         playbackTimeRef.current = 0;
 
-        if (canvasRef.current) {
-          drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
-        }
-
         const sampleRate = audioCtx.sampleRate;
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
@@ -448,6 +444,14 @@ export default function FloatingAIBar({
       setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
     }
   }, [voiceMode, contractText, drawWaveform, cleanupVoice, playPcmChunk, stopAllPlayback, onFixAll, onExport]);
+
+  // Start waveform once canvas is rendered
+  useEffect(() => {
+    if (voiceMode === "active" && canvasRef.current && analyserRef.current) {
+      drawWaveform(analyserRef.current, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+    }
+    return () => { if (voiceMode !== "active") cancelAnimationFrame(animFrameRef.current); };
+  }, [voiceMode, drawWaveform]);
 
   // Close on Escape, open on /
   useEffect(() => {
