@@ -142,16 +142,13 @@ export default function FloatingAIBar({
     if (!ctx) return;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    const barCount = 32;
+    const barCount = 28;
     const barGap = 3;
     const barWidth = 3;
     const totalWidth = barCount * (barWidth + barGap) - barGap;
 
-    // Bell curve weights — center bars get most energy
-    const weights = Array.from({ length: barCount }, (_, i) => {
-      const t = (i / (barCount - 1)) * 2 - 1; // -1 to 1
-      return Math.exp(-t * t * 2.5);
-    });
+    // Smoothed values for each bar (for fluid animation)
+    const smoothed = new Float32Array(barCount);
 
     const draw = () => {
       analyser.getByteFrequencyData(dataArray);
@@ -159,21 +156,26 @@ export default function FloatingAIBar({
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
 
-      // Compute overall energy from the frequency data
-      let energy = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        energy += dataArray[i];
-      }
-      energy = energy / bufferLength / 255; // 0-1
+      // Sample the useful frequency range (skip very low and very high)
+      const lo = 2;
+      const hi = Math.min(bufferLength, 200);
+      const range = hi - lo;
+      const samplesPerBar = Math.floor(range / barCount);
 
       const offsetX = (width - totalWidth) / 2;
 
       for (let i = 0; i < barCount; i++) {
-        // Each bar height = energy * bell curve weight + small random jitter
-        const w = weights[i];
-        const jitter = 0.85 + Math.random() * 0.3;
-        const barHeight = Math.max(2, energy * w * jitter * height * 1.6);
+        // Average a chunk of frequency bins for this bar
+        let sum = 0;
+        for (let j = 0; j < samplesPerBar; j++) {
+          sum += dataArray[lo + i * samplesPerBar + j];
+        }
+        const raw = sum / samplesPerBar / 255;
 
+        // Smooth towards target for fluid motion
+        smoothed[i] += (raw - smoothed[i]) * 0.3;
+
+        const barHeight = Math.max(2, smoothed[i] * height * 0.85);
         const x = offsetX + i * (barWidth + barGap);
         const y = (height - barHeight) / 2;
 
@@ -470,7 +472,7 @@ export default function FloatingAIBar({
   // Start waveform once canvas is rendered
   useEffect(() => {
     if (voiceMode === "active" && canvasRef.current && analyserRef.current) {
-      drawWaveform(analyserRef.current, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+      drawWaveform(analyserRef.current, canvasRef.current, "rgba(255, 255, 255, 0.7)");
     }
     return () => { if (voiceMode !== "active") cancelAnimationFrame(animFrameRef.current); };
   }, [voiceMode, drawWaveform]);
@@ -702,7 +704,7 @@ export default function FloatingAIBar({
     : "opacity 0.2s ease-in";
 
   const glowShadow = (() => {
-    if (voiceMode !== "idle") return "0 0 20px rgba(59, 130, 246, 0.2), 0 0 60px rgba(59, 130, 246, 0.08)";
+    if (voiceMode !== "idle") return "none";
     if (borderSpin) return "0 0 30px rgba(232, 220, 200, 0.2), 0 0 80px rgba(212, 200, 176, 0.1)";
     if (isExpanded) return "0 0 16px rgba(232, 220, 200, 0.12)";
     return "none";
@@ -715,7 +717,7 @@ export default function FloatingAIBar({
       ref={panelRef}
       className="fixed bottom-6 z-50"
       style={{
-        width: isFocused || isExpanded || isStreaming || isVoiceActive ? "min(720px, 90vw)" : "min(400px, 90vw)",
+        width: isFocused || isExpanded || isStreaming ? "min(720px, 90vw)" : "min(400px, 90vw)",
         left: "50vw",
         transform: "translateX(-50%)",
         transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -750,7 +752,7 @@ export default function FloatingAIBar({
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
           style={{
-            border: "1.5px solid rgba(59, 130, 246, 0.6)",
+            border: "1.5px solid rgba(255, 255, 255, 0.14)",
             opacity: isVoiceActive ? 1 : 0,
             transition: "opacity 0.3s ease",
             zIndex: 2,
@@ -975,11 +977,11 @@ export default function FloatingAIBar({
                 ) : voiceMode === "connecting" ? (
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "150ms" }} />
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "300ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/60 animate-pulse" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/60 animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/60 animate-pulse" style={{ animationDelay: "300ms" }} />
                     </div>
-                    <span className="text-xs text-blue-300/60">Connecting...</span>
+                    <span className="text-xs text-white/40">Connecting...</span>
                   </div>
                 ) : (
                   <>
@@ -990,7 +992,7 @@ export default function FloatingAIBar({
                       className="w-full"
                       style={{ height: "48px" }}
                     />
-                    <span className="text-[10px] text-blue-300/40 mt-1">Tap to end</span>
+                    <span className="text-[10px] text-white/25 mt-1">Tap to end</span>
                   </>
                 )}
               </div>
