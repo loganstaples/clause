@@ -4,6 +4,7 @@ export const DEMO_ANALYSIS: ContractAnalysis = {
   riskScore: 28,
   summary:
     "This lease is heavily landlord-favored with several clauses that expose the tenant to significant financial risk. The personal guarantee, uncapped rent escalation, and unrestricted CAM charges are the most concerning provisions that deviate substantially from market-standard commercial lease terms.",
+  counterparty: "Meridian Property Group LLC",
   counts: {
     critical: 4,
     warning: 2,

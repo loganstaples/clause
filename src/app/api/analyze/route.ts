@@ -17,12 +17,14 @@ For each flagged clause, provide:
 Also provide:
 - An overall contract favorability score from 0-100 representing how ready the contract is to sign as-is. 100 = excellent deal, very favorable to the small business owner, ready to sign. 0 = extremely unfavorable, needs major revisions. Score higher when terms are balanced and standard, lower when there are many unfavorable or problematic clauses.
 - A one-sentence summary of the contract's overall favorability for the small business owner
+- The name of the primary counterparty (the other party that is NOT the small business owner — e.g. the landlord, vendor, client, licensor, or service provider). Use their full legal name as it appears in the contract.
 - Counts of critical, warning, and info-level clauses
 
 Return your response as valid JSON matching this exact schema:
 {
   "riskScore": number,
   "summary": string,
+  "counterparty": string,
   "counts": { "critical": number, "warning": number, "info": number },
   "clauses": [
     {
@@ -168,6 +170,7 @@ async function* generateSSEEvents(
               `event: header\ndata: ${JSON.stringify({
                 riskScore: parsed.riskScore,
                 summary: parsed.summary,
+                counterparty: parsed.counterparty || "",
                 counts: parsed.counts,
               })}\n\n`
             );
@@ -252,6 +255,7 @@ async function* generateSSEEvents(
           `event: header\ndata: ${JSON.stringify({
             riskScore: analysis.riskScore,
             summary: analysis.summary,
+            counterparty: analysis.counterparty || "",
             counts: analysis.counts,
           })}\n\n`
         );

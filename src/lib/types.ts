@@ -12,6 +12,7 @@ export interface Clause {
 export interface ContractAnalysis {
   riskScore: number;
   summary: string;
+  counterparty: string;
   counts: {
     critical: number;
     warning: number;

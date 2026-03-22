@@ -12,6 +12,7 @@ interface StreamingState {
   header: {
     riskScore: number;
     summary: string;
+    counterparty: string;
     counts: { critical: number; warning: number; info: number };
   } | null;
   /** Clauses arrive one by one */
@@ -122,6 +123,7 @@ export function useStreamingAnalysis(
       ? {
           riskScore: state.header.riskScore,
           summary: state.header.summary,
+          counterparty: state.header.counterparty,
           counts: state.header.counts,
           clauses: state.clauses,
         }
