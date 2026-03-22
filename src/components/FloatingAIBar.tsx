@@ -285,19 +285,43 @@ export default function FloatingAIBar({
         ? `You are Clause, an AI legal assistant for small business owners. You are reviewing a contract. Here is the contract:\n\n${contractText}\n\nAnswer questions clearly in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`
         : `You are Clause, an AI legal assistant for small business owners. Help understand legal concepts and contracts in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`;
 
-      ws.onopen = () => {
-        // Send setup message
-        ws.send(JSON.stringify({
-          setup: {
-            model: "models/gemini-2.5-flash-preview-native-audio-dialog",
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName: "Kore" },
-                },
+      let micStarted = false;
+
+      const startMicStreaming = () => {
+        if (micStarted) return;
+        micStarted = true;
+        setVoiceMode("active");
+        playbackTimeRef.current = 0;
+
+        if (canvasRef.current) {
+          drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+        }
+
+        const sampleRate = audioCtx.sampleRate;
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          const downsampled = downsample(inputData, sampleRate);
+          const pcm = float32ToInt16(downsampled);
+          const base64 = arrayBufferToBase64(pcm.buffer as ArrayBuffer);
+
+          ws.send(JSON.stringify({
+            realtimeInput: {
+              audio: {
+                data: base64,
+                mimeType: "audio/pcm;rate=16000",
               },
             },
+          }));
+        };
+      };
+
+      ws.onopen = () => {
+        console.log("[Voice] WebSocket connected, sending config...");
+        ws.send(JSON.stringify({
+          config: {
+            model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
+            responseModalities: ["AUDIO"],
             systemInstruction: {
               parts: [{ text: sysInstruction }],
             },
@@ -308,35 +332,12 @@ export default function FloatingAIBar({
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          console.log("[Voice] Received:", Object.keys(msg));
 
           // Setup complete — start streaming mic audio
-          if (msg.setupComplete) {
-            setVoiceMode("active");
-            playbackTimeRef.current = 0;
-
-            // Start waveform drawing
-            if (canvasRef.current) {
-              drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
-            }
-
-            // Start sending mic audio
-            const sampleRate = audioCtx.sampleRate;
-            processor.onaudioprocess = (e) => {
-              if (ws.readyState !== WebSocket.OPEN) return;
-              const inputData = e.inputBuffer.getChannelData(0);
-              const downsampled = downsample(inputData, sampleRate);
-              const pcm = float32ToInt16(downsampled);
-              const base64 = arrayBufferToBase64(pcm.buffer as ArrayBuffer);
-
-              ws.send(JSON.stringify({
-                realtimeInput: {
-                  mediaChunks: [{
-                    data: base64,
-                    mimeType: "audio/pcm;rate=16000",
-                  }],
-                },
-              }));
-            };
+          if (msg.setupComplete !== undefined) {
+            console.log("[Voice] Setup complete, starting mic streaming");
+            startMicStreaming();
             return;
           }
 
@@ -349,19 +350,20 @@ export default function FloatingAIBar({
             }
           }
         } catch (e) {
-          console.error("WS message parse error:", e);
+          console.error("[Voice] Message parse error:", e);
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (e) => {
+        console.error("[Voice] WebSocket error:", e);
         setVoiceError("Connection error");
         setVoiceMode("error");
         cleanupVoice();
         setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
       };
 
-      ws.onclose = () => {
-        // Only set idle if we haven't already set error
+      ws.onclose = (e) => {
+        console.log("[Voice] WebSocket closed:", e.code, e.reason);
         setVoiceMode((prev) => prev === "error" ? prev : "idle");
         cancelAnimationFrame(animFrameRef.current);
         processorRef.current?.disconnect();
