@@ -76,6 +76,7 @@ export default function FloatingAIBar({
   const wsRef = useRef<WebSocket | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const playbackTimeRef = useRef<number>(0);
+  const playbackSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -161,8 +162,17 @@ export default function FloatingAIBar({
     draw();
   }, []);
 
+  const stopAllPlayback = useCallback(() => {
+    for (const src of playbackSourcesRef.current) {
+      try { src.stop(); } catch { /* already stopped */ }
+    }
+    playbackSourcesRef.current = [];
+    playbackTimeRef.current = 0;
+  }, []);
+
   const cleanupVoice = useCallback(() => {
     cancelAnimationFrame(animFrameRef.current);
+    stopAllPlayback();
     processorRef.current?.disconnect();
     processorRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -175,7 +185,7 @@ export default function FloatingAIBar({
     audioContextRef.current = null;
     analyserRef.current = null;
     playbackTimeRef.current = 0;
-  }, []);
+  }, [stopAllPlayback]);
 
   const endVoiceSession = useCallback(() => {
     cleanupVoice();
@@ -242,6 +252,11 @@ export default function FloatingAIBar({
     const startTime = Math.max(audioCtx.currentTime + 0.05, playbackTimeRef.current);
     source.start(startTime);
     playbackTimeRef.current = startTime + audioBuffer.duration;
+
+    playbackSourcesRef.current.push(source);
+    source.onended = () => {
+      playbackSourcesRef.current = playbackSourcesRef.current.filter((s) => s !== source);
+    };
   }, []);
 
   const handleMicClick = useCallback(async () => {
@@ -282,8 +297,8 @@ export default function FloatingAIBar({
       wsRef.current = ws;
 
       const sysInstruction = contractText
-        ? `You are Clause, an AI legal assistant for small business owners. You are reviewing a contract. Here is the contract:\n\n${contractText}\n\nAnswer questions clearly in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`
-        : `You are Clause, an AI legal assistant for small business owners. Help understand legal concepts and contracts in plain English. Be concise and conversational — you are speaking aloud. You are not a lawyer and cannot provide legal advice.`;
+        ? `You are Clause, a voice legal assistant. You are reviewing a contract:\n\n${contractText}\n\nRules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.`
+        : `You are Clause, a voice legal assistant. Rules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.`;
 
       let micStarted = false;
 
@@ -343,6 +358,13 @@ export default function FloatingAIBar({
           if (msg.setupComplete !== undefined) {
             console.log("[Voice] Setup complete, starting mic streaming");
             startMicStreaming();
+            return;
+          }
+
+          // Interruption — user started speaking, stop AI playback
+          if (msg.serverContent?.interrupted) {
+            console.log("[Voice] Interrupted by user");
+            stopAllPlayback();
             return;
           }
 
