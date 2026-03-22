@@ -331,9 +331,12 @@ export default function FloatingAIBar({
         }));
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         try {
-          const msg = JSON.parse(event.data);
+          const text = event.data instanceof Blob
+            ? await event.data.text()
+            : event.data;
+          const msg = JSON.parse(text);
           console.log("[Voice] Received:", Object.keys(msg));
 
           // Setup complete — start streaming mic audio
