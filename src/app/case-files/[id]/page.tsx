@@ -343,6 +343,8 @@ export default function CaseFilePage({
         onChatUpdate={handleChatUpdate}
         contextParagraph={selectedParagraph}
         onClearContext={() => setSelectedParagraph(null)}
+        onFixAll={handleFixAll}
+        onExport={() => setShowPDFPreview(true)}
       />
 
       <AnimatePresence>

@@ -13,6 +13,8 @@ interface FloatingAIBarProps {
   onChatUpdate: (messages: ChatMessage[]) => void;
   contextParagraph?: string | null;
   onClearContext?: () => void;
+  onFixAll?: () => void;
+  onExport?: () => void;
 }
 
 type BorderState = "idle" | "settled" | "leaving";
@@ -33,6 +35,8 @@ export default function FloatingAIBar({
   onChatUpdate,
   contextParagraph,
   onClearContext,
+  onFixAll,
+  onExport,
 }: FloatingAIBarProps) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -296,9 +300,13 @@ export default function FloatingAIBar({
       const ws = new WebSocket(`${GEMINI_WS_URL}?key=${key}`);
       wsRef.current = ws;
 
+      const hasTools = !!(onFixAll || onExport);
+      const toolInstructions = hasTools
+        ? ` You have tools available: ${onFixAll ? "fix_all_issues (fixes all flagged contract issues with suggested replacements)" : ""}${onFixAll && onExport ? " and " : ""}${onExport ? "export_contract (exports the contract as a PDF with redlines)" : ""}. When the user asks you to fix issues, fix the contract, clean it up, or similar — call fix_all_issues. When they ask to export, download, send, or share the contract — call export_contract. If they ask to do both, call fix_all_issues first, then export_contract. After calling a tool, briefly confirm what you did.`
+        : "";
       const sysInstruction = contractText
-        ? `You are Clause, a voice legal assistant. You are reviewing a contract:\n\n${contractText}\n\nRules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.`
-        : `You are Clause, a voice legal assistant. Rules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.`;
+        ? `You are Clause, a voice legal assistant. You are reviewing a contract.\n\nRules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.${toolInstructions}`
+        : `You are Clause, a voice legal assistant. Rules: Do NOT introduce yourself or greet the user. Do NOT say "sure" or "of course" or any filler. Jump straight to the answer. Keep responses to 1-3 sentences max. Speak naturally and conversationally. Wait for the user to ask before speaking.${toolInstructions}`;
 
       let micStarted = false;
 
@@ -333,7 +341,21 @@ export default function FloatingAIBar({
 
       ws.onopen = () => {
         console.log("[Voice] WebSocket connected, sending setup...");
-        ws.send(JSON.stringify({
+        const toolDeclarations = [];
+        if (onFixAll) {
+          toolDeclarations.push({
+            name: "fix_all_issues",
+            description: "Fix all flagged issues in the contract by applying suggested replacement language",
+          });
+        }
+        if (onExport) {
+          toolDeclarations.push({
+            name: "export_contract",
+            description: "Export the contract as a PDF with redlined changes and generate an email draft",
+          });
+        }
+
+        const setupMsg: Record<string, unknown> = {
           setup: {
             model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
             generationConfig: {
@@ -342,8 +364,12 @@ export default function FloatingAIBar({
             systemInstruction: {
               parts: [{ text: sysInstruction }],
             },
+            ...(toolDeclarations.length > 0 && {
+              tools: [{ functionDeclarations: toolDeclarations }],
+            }),
           },
-        }));
+        };
+        ws.send(JSON.stringify(setupMsg));
       };
 
       ws.onmessage = async (event) => {
@@ -365,6 +391,26 @@ export default function FloatingAIBar({
           if (msg.serverContent?.interrupted) {
             console.log("[Voice] Interrupted by user");
             stopAllPlayback();
+            return;
+          }
+
+          // Tool calls — fix all or export
+          if (msg.toolCall?.functionCalls) {
+            console.log("[Voice] Tool call:", msg.toolCall.functionCalls);
+            const functionResponses = [];
+            for (const fc of msg.toolCall.functionCalls) {
+              if (fc.name === "fix_all_issues" && onFixAll) {
+                onFixAll();
+                functionResponses.push({ id: fc.id, name: fc.name, response: { result: "All issues have been fixed." } });
+              } else if (fc.name === "export_contract" && onExport) {
+                onExport();
+                functionResponses.push({ id: fc.id, name: fc.name, response: { result: "Contract exported." } });
+              }
+            }
+            // Send tool responses back so the model can confirm
+            if (functionResponses.length > 0 && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ toolResponse: { functionResponses } }));
+            }
             return;
           }
 
@@ -406,7 +452,7 @@ export default function FloatingAIBar({
       cleanupVoice();
       setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
     }
-  }, [voiceMode, contractText, drawWaveform, cleanupVoice, playPcmChunk]);
+  }, [voiceMode, contractText, drawWaveform, cleanupVoice, playPcmChunk, stopAllPlayback, onFixAll, onExport]);
 
   // Close on Escape, open on /
   useEffect(() => {
