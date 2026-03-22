@@ -142,25 +142,35 @@ export default function FloatingAIBar({
     if (!ctx) return;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
+    const barCount = 48;
+    const barGap = 2;
 
     const draw = () => {
-      analyser.getByteTimeDomainData(dataArray);
+      analyser.getByteFrequencyData(dataArray);
       const width = canvas.width;
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      const sliceWidth = width / bufferLength;
-      let x = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * height) / 2;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        x += sliceWidth;
+
+      const barWidth = (width - (barCount - 1) * barGap) / barCount;
+      const samplesPerBar = Math.floor(bufferLength / barCount);
+
+      for (let i = 0; i < barCount; i++) {
+        let sum = 0;
+        for (let j = 0; j < samplesPerBar; j++) {
+          sum += dataArray[i * samplesPerBar + j];
+        }
+        const avg = sum / samplesPerBar / 255;
+        const barHeight = Math.max(2, avg * height * 0.9);
+
+        const x = i * (barWidth + barGap);
+        const y = (height - barHeight) / 2;
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barWidth, barHeight, barWidth / 2);
+        ctx.fill();
       }
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
+
       animFrameRef.current = requestAnimationFrame(draw);
     };
     draw();
