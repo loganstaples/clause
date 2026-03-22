@@ -28,6 +28,7 @@ export default function CaseFilePage({
   const [originalAnalysis, setOriginalAnalysis] = useState<{ score: number; clauses: Clause[] } | null>(null);
   const [showPDFPreview, setShowPDFPreview] = useState(false);
   const [resummarizing, setResummarizing] = useState(false);
+  const [streamingApprovals, setStreamingApprovals] = useState<Map<string, Clause>>(new Map());
 
   useEffect(() => {
     const c = getContract(id);
@@ -59,14 +60,45 @@ export default function CaseFilePage({
     }
   }, [streamState.title]);
 
-  // When streaming completes, persist the analysis to the contract
+  // When streaming completes, persist the analysis (with any mid-stream approvals applied)
   useEffect(() => {
     if (streamedAnalysis && contract && !contract.analysis) {
-      const updated = { ...contract, analysis: streamedAnalysis };
+      let newRawText = contract.rawText;
+      let finalClauses = streamedAnalysis.clauses;
+
+      // Apply revisions that were approved while streaming was in progress
+      if (streamingApprovals.size > 0) {
+        for (const [, clause] of streamingApprovals) {
+          newRawText = replaceClauseText(newRawText, clause.originalText, clause.suggestedReplacement);
+        }
+        finalClauses = finalClauses.map((c) =>
+          streamingApprovals.has(c.id)
+            ? {
+                ...c,
+                severity: "info" as const,
+                originalText: streamingApprovals.get(c.id)!.suggestedReplacement,
+                explanation: "Revised — this clause now uses more favorable language.",
+              }
+            : c
+        );
+      }
+
+      const analysis = {
+        ...streamedAnalysis,
+        clauses: finalClauses,
+        riskScore: streamingApprovals.size > 0
+          ? recalcScore(streamedAnalysis.riskScore, streamedAnalysis.clauses, finalClauses)
+          : streamedAnalysis.riskScore,
+      };
+
+      const updated = { ...contract, rawText: newRawText, analysis };
       setContract(updated);
       saveContract(updated);
       if (!originalAnalysis) {
         setOriginalAnalysis({ score: streamedAnalysis.riskScore, clauses: [...streamedAnalysis.clauses] });
+      }
+      if (streamingApprovals.size > 0) {
+        setStreamingApprovals(new Map());
       }
     }
   }, [streamedAnalysis, contract]);
@@ -173,35 +205,41 @@ export default function CaseFilePage({
   };
 
   const handleApproveRevision = useCallback(() => {
-    if (!contract || !revisionClause || !contract.analysis) return;
+    if (!contract || !revisionClause) return;
 
-    const newRawText = replaceClauseText(
-      contract.rawText,
-      revisionClause.originalText,
-      revisionClause.suggestedReplacement
-    );
+    if (contract.analysis) {
+      // Analysis complete — apply revision immediately
+      const newRawText = replaceClauseText(
+        contract.rawText,
+        revisionClause.originalText,
+        revisionClause.suggestedReplacement
+      );
 
-    // Convert the clause to a resolved info card
-    const updatedClauses = contract.analysis.clauses.map((c) =>
-      c.id === revisionClause.id
-        ? {
-            ...c,
-            severity: "info" as const,
-            originalText: revisionClause.suggestedReplacement,
-            explanation: "Revised — this clause now uses more favorable language.",
-          }
-        : c
-    );
-    const orig = originalAnalysis ?? { score: contract.analysis.riskScore, clauses: contract.analysis.clauses };
-    const updatedAnalysis = {
-      ...contract.analysis,
-      clauses: updatedClauses,
-      riskScore: recalcScore(orig.score, orig.clauses, updatedClauses),
-    };
+      const updatedClauses = contract.analysis.clauses.map((c) =>
+        c.id === revisionClause.id
+          ? {
+              ...c,
+              severity: "info" as const,
+              originalText: revisionClause.suggestedReplacement,
+              explanation: "Revised — this clause now uses more favorable language.",
+            }
+          : c
+      );
+      const orig = originalAnalysis ?? { score: contract.analysis.riskScore, clauses: contract.analysis.clauses };
+      const updatedAnalysis = {
+        ...contract.analysis,
+        clauses: updatedClauses,
+        riskScore: recalcScore(orig.score, orig.clauses, updatedClauses),
+      };
 
-    const updated = { ...contract, rawText: newRawText, analysis: updatedAnalysis };
-    setContract(updated);
-    saveContract(updated);
+      const updated = { ...contract, rawText: newRawText, analysis: updatedAnalysis };
+      setContract(updated);
+      saveContract(updated);
+    } else {
+      // Still streaming — defer text replacement, track approval to apply when done
+      setStreamingApprovals((prev) => new Map(prev).set(revisionClause.id, revisionClause));
+    }
+
     setRevisionClause(null);
   }, [contract, revisionClause, originalAnalysis]);
 
@@ -280,9 +318,21 @@ export default function CaseFilePage({
   }
 
   // Determine what clauses to show — from completed analysis or from streaming
+  // During streaming, mark any mid-stream approved clauses as resolved
   const displayClauses = contract.analysis
     ? contract.analysis.clauses
-    : streamState.clauses;
+    : streamingApprovals.size > 0
+      ? streamState.clauses.map((c) =>
+          streamingApprovals.has(c.id)
+            ? {
+                ...c,
+                severity: "info" as const,
+                originalText: streamingApprovals.get(c.id)!.suggestedReplacement,
+                explanation: "Revised — this clause now uses more favorable language.",
+              }
+            : c
+        )
+      : streamState.clauses;
 
   const isLoadingTitle = needsAnalysis && !streamState.title;
 

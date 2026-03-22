@@ -81,6 +81,7 @@ export default function FloatingAIBar({
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const playbackTimeRef = useRef<number>(0);
   const playbackSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const toolCallPendingRef = useRef(false);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -417,14 +418,28 @@ export default function FloatingAIBar({
           // Tool calls — fix all or export
           if (msg.toolCall?.functionCalls) {
             console.log("[Voice] Tool call:", msg.toolCall.functionCalls);
+            toolCallPendingRef.current = true;
+            const functionResponses = [];
             for (const fc of msg.toolCall.functionCalls) {
               if (fc.name === "fix_all_issues" && onFixAll) {
                 onFixAll();
+                functionResponses.push({ id: fc.id, name: fc.name, response: { result: "done" } });
               } else if (fc.name === "export_contract" && onExport) {
                 onExport();
+                functionResponses.push({ id: fc.id, name: fc.name, response: { result: "done" } });
               }
             }
-            // End the voice session — no verbal confirmation needed
+            // Send tool results back to Gemini so it can continue (e.g. chain a second tool call)
+            if (ws.readyState === WebSocket.OPEN && functionResponses.length > 0) {
+              ws.send(JSON.stringify({ toolResponse: { functionResponses } }));
+            }
+            return;
+          }
+
+          // Turn complete after tool calls — end the voice session
+          if (msg.serverContent?.turnComplete && toolCallPendingRef.current) {
+            console.log("[Voice] Turn complete after tool calls, ending session");
+            toolCallPendingRef.current = false;
             endVoiceSession();
             return;
           }

@@ -46,7 +46,7 @@ export default function DocumentsPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="flex items-center gap-2 rounded-lg bg-[#F0EBE3] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#E4DDD3]"
+              className="flex items-center gap-2 rounded-lg bg-[#F0EBE3] px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-[#E4DDD3]"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
