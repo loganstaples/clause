@@ -82,6 +82,7 @@ export default function FloatingAIBar({
   const playbackTimeRef = useRef<number>(0);
   const playbackSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const toolCallPendingRef = useRef(false);
+  const aiSpeakingRef = useRef(false);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -197,6 +198,7 @@ export default function FloatingAIBar({
     }
     playbackSourcesRef.current = [];
     playbackTimeRef.current = 0;
+    aiSpeakingRef.current = false;
   }, []);
 
   const cleanupVoice = useCallback(() => {
@@ -282,9 +284,13 @@ export default function FloatingAIBar({
     source.start(startTime);
     playbackTimeRef.current = startTime + audioBuffer.duration;
 
+    aiSpeakingRef.current = true;
     playbackSourcesRef.current.push(source);
     source.onended = () => {
       playbackSourcesRef.current = playbackSourcesRef.current.filter((s) => s !== source);
+      if (playbackSourcesRef.current.length === 0) {
+        aiSpeakingRef.current = false;
+      }
     };
   }, []);
 
@@ -344,6 +350,19 @@ export default function FloatingAIBar({
         const sampleRate = audioCtx.sampleRate;
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
+
+          // Send silence while AI is speaking to prevent echo triggering interruptions
+          if (aiSpeakingRef.current) {
+            const silentPcm = new Int16Array(960); // 60ms of silence at 16kHz
+            const base64 = arrayBufferToBase64(silentPcm.buffer as ArrayBuffer);
+            ws.send(JSON.stringify({
+              realtimeInput: {
+                audio: { data: base64, mimeType: "audio/pcm;rate=16000" },
+              },
+            }));
+            return;
+          }
+
           const inputData = e.inputBuffer.getChannelData(0);
           const downsampled = downsample(inputData, sampleRate);
           const pcm = float32ToInt16(downsampled);

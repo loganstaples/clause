@@ -62,8 +62,12 @@ export default function CaseFilePage({
 
   // When streaming completes, persist the analysis (with any mid-stream approvals applied)
   useEffect(() => {
-    if (streamedAnalysis && contract && !contract.analysis) {
-      let newRawText = contract.rawText;
+    if (!streamedAnalysis) return;
+
+    setContract((prev) => {
+      if (!prev || prev.analysis) return prev;
+
+      let newRawText = prev.rawText;
       let finalClauses = streamedAnalysis.clauses;
 
       // Apply revisions that were approved while streaming was in progress
@@ -91,17 +95,18 @@ export default function CaseFilePage({
           : streamedAnalysis.riskScore,
       };
 
-      const updated = { ...contract, rawText: newRawText, analysis };
-      setContract(updated);
+      const updated = { ...prev, rawText: newRawText, analysis };
       saveContract(updated);
-      if (!originalAnalysis) {
-        setOriginalAnalysis({ score: streamedAnalysis.riskScore, clauses: [...streamedAnalysis.clauses] });
-      }
-      if (streamingApprovals.size > 0) {
-        setStreamingApprovals(new Map());
-      }
+      return updated;
+    });
+
+    if (!originalAnalysis) {
+      setOriginalAnalysis({ score: streamedAnalysis.riskScore, clauses: [...streamedAnalysis.clauses] });
     }
-  }, [streamedAnalysis, contract]);
+    if (streamingApprovals.size > 0) {
+      setStreamingApprovals(new Map());
+    }
+  }, [streamedAnalysis]);
 
   const handleClauseClick = useCallback((clauseId: string) => {
     setActiveClauseId(clauseId);
@@ -148,12 +153,14 @@ export default function CaseFilePage({
 
   const handleChatUpdate = useCallback(
     (messages: ChatMessage[]) => {
-      if (!contract) return;
-      const updated = { ...contract, chatHistory: messages };
-      setContract(updated);
-      saveContract(updated);
+      setContract((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, chatHistory: messages };
+        saveContract(updated);
+        return updated;
+      });
     },
-    [contract]
+    []
   );
 
   // Replace clause text in rawText using exact or fuzzy matching
