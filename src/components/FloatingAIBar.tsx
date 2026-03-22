@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { createPortal } from "react-dom";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import { ChatMessage } from "@/lib/types";
@@ -17,12 +16,9 @@ interface FloatingAIBarProps {
 }
 
 type BorderState = "idle" | "settled" | "leaving";
+type VoiceMode = "idle" | "recording" | "processing" | "playing" | "error";
 
-const MODELS = [
-  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", desc: "Fast" },
-  { id: "claude-sonnet-4-6", label: "Sonnet 4.6", desc: "Balanced" },
-  { id: "claude-opus-4-6", label: "Opus 4.6", desc: "Best" },
-] as const;
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
 const CONIC_GRADIENT =
   "conic-gradient(from 0deg, #F5F0E8, #FFFFFF, #F0EBE3, #FFFFFF, #F5F0E8, #FFFFFF, #F0EBE3, #FFFFFF, #F5F0E8)";
@@ -42,9 +38,11 @@ export default function FloatingAIBar({
   const [isStreaming, setIsStreaming] = useState(false);
   const [borderState, setBorderState] = useState<BorderState>("idle");
   const [flashKey, setFlashKey] = useState(0);
-  const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id);
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const selectedModel = DEFAULT_MODEL;
+
+  // Voice mode
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("idle");
+  const [voiceError, setVoiceError] = useState("");
 
   // Expanded state — the bar grows upward
   const [isExpanded, setIsExpanded] = useState(false);
@@ -68,9 +66,15 @@ export default function FloatingAIBar({
   const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
-  const modelBtnRef = useRef<HTMLButtonElement>(null);
-  const modelMenuOpenRef = useRef(false);
+
+  // Voice mode refs
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number>(0);
 
   const stateRef = useRef<BorderState>("idle");
   const focusedRef = useRef(false);
@@ -124,16 +128,165 @@ export default function FloatingAIBar({
     return () => clearTimeout(timer);
   }, [followups, followupsLoading]);
 
+  // ===== VOICE MODE LOGIC =====
+  const drawWaveform = useCallback((analyser: AnalyserNode, canvas: HTMLCanvasElement, color: string) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      analyser.getByteTimeDomainData(dataArray);
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      const sliceWidth = width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * height) / 2;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+      animFrameRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+  }, []);
+
+  const cleanupVoice = useCallback(() => {
+    cancelAnimationFrame(animFrameRef.current);
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    mediaRecorderRef.current = null;
+  }, []);
+
+  const playAudioResponse = useCallback(async (wavBlob: Blob) => {
+    setVoiceMode("playing");
+    try {
+      const audioCtx = new AudioContext();
+      audioContextRef.current = audioCtx;
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
+      const arrayBuffer = await wavBlob.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      source.start();
+      if (canvasRef.current) drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+      source.onended = () => {
+        cancelAnimationFrame(animFrameRef.current);
+        audioCtx.close().catch(() => {});
+        audioContextRef.current = null;
+        setVoiceMode("idle");
+      };
+    } catch {
+      cleanupVoice();
+      setVoiceMode("idle");
+    }
+  }, [drawWaveform, cleanupVoice]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  const handleMicClick = useCallback(async () => {
+    if (voiceMode !== "idle") return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const audioCtx = new AudioContext();
+      audioContextRef.current = audioCtx;
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        cancelAnimationFrame(animFrameRef.current);
+        audioCtx.close().catch(() => {});
+        audioContextRef.current = null;
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        if (audioBlob.size === 0) { setVoiceMode("idle"); return; }
+
+        setVoiceMode("processing");
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob);
+          if (contractText) formData.append("contractText", contractText);
+          const res = await fetch("/api/voice", { method: "POST", body: formData });
+          if (!res.ok) throw new Error("Voice API error");
+          const wavBlob = await res.blob();
+          await playAudioResponse(wavBlob);
+        } catch {
+          setVoiceError("Something went wrong");
+          setVoiceMode("error");
+          setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
+        }
+      };
+
+      recorder.start(250);
+      setVoiceMode("recording");
+
+      if (canvasRef.current) drawWaveform(analyser, canvasRef.current, "rgba(96, 165, 250, 0.8)");
+
+      // Auto-stop after 60s
+      setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") stopRecording();
+      }, 60000);
+    } catch {
+      setVoiceError("Microphone access denied");
+      setVoiceMode("error");
+      setTimeout(() => { setVoiceMode("idle"); setVoiceError(""); }, 2500);
+    }
+  }, [voiceMode, contractText, drawWaveform, stopRecording, playAudioResponse]);
+
   // Close on Escape, open on /
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && isExpanded && !isStreaming) {
-        setIsExpanded(false);
-        setActiveParagraph(null);
-        setParagraphQuestions([]);
-        clearTimers();
-        setBorderState("leaving");
-        timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
+      if (e.key === "Escape") {
+        if (voiceMode === "recording") {
+          stopRecording();
+          cleanupVoice();
+          setVoiceMode("idle");
+          return;
+        }
+        if (isExpanded && !isStreaming) {
+          setIsExpanded(false);
+          setActiveParagraph(null);
+          setParagraphQuestions([]);
+          clearTimers();
+          setBorderState("leaving");
+          timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
+        }
       }
       if (e.key === "/" && !isExpanded && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
@@ -142,15 +295,14 @@ export default function FloatingAIBar({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isExpanded, isStreaming]);
+  }, [isExpanded, isStreaming, voiceMode, stopRecording, cleanupVoice]);
 
   // Click outside to collapse
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (
         isExpanded && !isStreaming &&
-        panelRef.current && !panelRef.current.contains(e.target as Node) &&
-        !modelMenuRef.current?.contains(e.target as Node)
+        panelRef.current && !panelRef.current.contains(e.target as Node)
       ) {
         setIsExpanded(false);
         setActiveParagraph(null);
@@ -164,39 +316,6 @@ export default function FloatingAIBar({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isExpanded, isStreaming]);
 
-  // Close model menu on click outside
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (
-        modelMenuRef.current && !modelMenuRef.current.contains(e.target as HTMLElement) &&
-        modelBtnRef.current && !modelBtnRef.current.contains(e.target as HTMLElement)
-      ) setModelMenuOpen(false);
-    };
-    if (modelMenuOpen) document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [modelMenuOpen]);
-
-  const prevMenuOpen = useRef(false);
-  useEffect(() => {
-    const wasOpen = prevMenuOpen.current;
-    prevMenuOpen.current = modelMenuOpen;
-    if (wasOpen && !modelMenuOpen && !focusedRef.current && stateRef.current === "settled") {
-      clearTimers();
-      setBorderState("leaving");
-      timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
-    }
-  }, [modelMenuOpen]);
-
-  modelMenuOpenRef.current = modelMenuOpen;
-
-  const toggleModelMenu = useCallback(() => {
-    if (modelMenuOpen) { setModelMenuOpen(false); return; }
-    if (modelBtnRef.current) {
-      const rect = modelBtnRef.current.getBoundingClientRect();
-      setMenuPos({ top: rect.top - 4, right: window.innerWidth - rect.right });
-    }
-    setModelMenuOpen(true);
-  }, [modelMenuOpen]);
 
   const handleFocus = useCallback(() => {
     focusedRef.current = true;
@@ -209,10 +328,8 @@ export default function FloatingAIBar({
     clearTimers();
     if (isStreaming) return;
     const related = e.relatedTarget as HTMLElement | null;
-    if (related && (modelBtnRef.current?.contains(related) || modelMenuRef.current?.contains(related))) return;
     timersRef.current.push(
       setTimeout(() => {
-        if (modelMenuOpenRef.current) return;
         setBorderState("leaving");
         timersRef.current.push(setTimeout(() => setBorderState("idle"), 500));
       }, 0)
@@ -381,10 +498,13 @@ export default function FloatingAIBar({
     : "opacity 0.2s ease-in";
 
   const glowShadow = (() => {
+    if (voiceMode !== "idle") return "0 0 20px rgba(59, 130, 246, 0.2), 0 0 60px rgba(59, 130, 246, 0.08)";
     if (borderSpin) return "0 0 30px rgba(232, 220, 200, 0.2), 0 0 80px rgba(212, 200, 176, 0.1)";
     if (isExpanded) return "0 0 16px rgba(232, 220, 200, 0.12)";
     return "none";
   })();
+
+  const isVoiceActive = voiceMode !== "idle";
 
   return (
     <div
@@ -417,8 +537,19 @@ export default function FloatingAIBar({
           className="absolute inset-0 rounded-2xl pointer-events-none"
           style={{
             border: "1.5px solid rgba(255, 255, 255, 0.14)",
-            opacity: borderState === "idle" && !borderSpin ? 1 : 0,
+            opacity: borderState === "idle" && !borderSpin && !isVoiceActive ? 1 : 0,
             transition: "opacity 0.5s ease",
+          }}
+        />
+
+        {/* Voice mode border */}
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{
+            border: "1.5px solid rgba(59, 130, 246, 0.6)",
+            opacity: isVoiceActive ? 1 : 0,
+            transition: "opacity 0.3s ease",
+            zIndex: 2,
           }}
         />
 
@@ -628,120 +759,124 @@ export default function FloatingAIBar({
 
           {/* ===== INPUT AREA — always at the bottom ===== */}
           <div className="px-4 pt-3 pb-2.5 flex flex-col relative">
-            {/* Textarea (or question preview while streaming) */}
-            {isStreaming ? (
-              <div className="py-0.5 flex items-center gap-2">
-                <div className="flex gap-1 shrink-0">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "150ms" }} />
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "300ms" }} />
-                </div>
-                <span className="text-sm text-[#5C5C5C]">Generating response...</span>
+            {isVoiceActive ? (
+              /* ===== VOICE MODE UI ===== */
+              <div
+                onClick={() => { if (voiceMode === "recording") stopRecording(); }}
+                className="flex flex-col items-center justify-center"
+                style={{ minHeight: "56px", cursor: voiceMode === "recording" ? "pointer" : "default" }}
+              >
+                {voiceMode === "error" ? (
+                  <span className="text-xs text-red-400">{voiceError}</span>
+                ) : voiceMode === "processing" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <span className="text-xs text-blue-300/60">Processing...</span>
+                  </div>
+                ) : (
+                  <>
+                    <canvas
+                      ref={canvasRef}
+                      width={600}
+                      height={48}
+                      className="w-full"
+                      style={{ height: "48px" }}
+                    />
+                    {voiceMode === "recording" && (
+                      <span className="text-[10px] text-blue-300/40 mt-1">Tap anywhere to stop</span>
+                    )}
+                  </>
+                )}
               </div>
             ) : (
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
-                }}
-                onKeyDown={handleKeyDown}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                placeholder={activeParagraph && !question ? "Ask about this passage..." : placeholder}
-                rows={1}
-                className={`w-full bg-transparent text-sm focus:outline-none focus:ring-0 border-none outline-none resize-none overflow-y-auto transition-colors duration-200 ${isFocused ? "ai-placeholder-bright" : "ai-placeholder-dim"}`}
-                style={{ boxShadow: "none", WebkitAppearance: "none", color: isFocused ? "#ffffff" : "rgba(234, 234, 240, 0.6)" }}
-              />
-            )}
-
-            {/* Model selector + Send/Close */}
-            <div className="flex justify-between items-center gap-1.5 mt-1">
-              {/* Left: close button when expanded */}
-              <div>
-                {isExpanded && !isStreaming && (
-                  <button
-                    onClick={() => { setIsExpanded(false); setActiveParagraph(null); setParagraphQuestions([]); clearTimers(); setBorderState("leaving"); timersRef.current.push(setTimeout(() => setBorderState("idle"), 500)); }}
-                    className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium text-[#5C5C5C] rounded-lg transition-colors hover:text-[#999999] hover:bg-[rgba(255,255,255,0.04)]"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="6 15 12 9 18 15" />
-                    </svg>
-                    Collapse
-                  </button>
+              <>
+                {/* Textarea (or question preview while streaming) */}
+                {isStreaming ? (
+                  <div className="py-0.5 flex items-center gap-2">
+                    <div className="flex gap-1 shrink-0">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#F0EBE3] animate-pulse" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <span className="text-sm text-[#5C5C5C]">Generating response...</span>
+                  </div>
+                ) : (
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    placeholder={activeParagraph && !question ? "Ask about this passage..." : placeholder}
+                    rows={1}
+                    className={`w-full bg-transparent text-sm focus:outline-none focus:ring-0 border-none outline-none resize-none overflow-y-auto transition-colors duration-200 ${isFocused ? "ai-placeholder-bright" : "ai-placeholder-dim"}`}
+                    style={{ boxShadow: "none", WebkitAppearance: "none", color: isFocused ? "#ffffff" : "rgba(234, 234, 240, 0.6)" }}
+                  />
                 )}
-              </div>
 
-              <div className="flex items-center gap-1.5">
-                {/* Model selector */}
-                <div className="relative">
-                  <button
-                    ref={modelBtnRef}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={toggleModelMenu}
-                    disabled={isStreaming}
-                    className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium rounded-lg transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{
-                      background: modelMenuOpen ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.04)",
-                      color: isFocused ? "rgba(255, 255, 255, 0.55)" : "rgba(255, 255, 255, 0.25)",
-                      border: modelMenuOpen ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(255, 255, 255, 0.06)",
-                    }}
-                  >
-                    {MODELS.find((m) => m.id === selectedModel)?.label}
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ opacity: 0.5 }}><path d="M1.5 5L4 2.5L6.5 5" /></svg>
-                  </button>
-                </div>
-
-                {/* Model menu */}
-                {modelMenuOpen && menuPos && createPortal(
-                  <div
-                    ref={modelMenuRef}
-                    className="fixed z-[60] w-44 rounded-xl overflow-hidden"
-                    style={{
-                      top: menuPos.top, right: menuPos.right, transform: "translateY(-100%)",
-                      background: "linear-gradient(135deg, rgba(12, 12, 12, 0.96) 0%, rgba(18, 18, 18, 0.94) 100%)",
-                      backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                      border: "1px solid rgba(255, 255, 255, 0.10)",
-                      boxShadow: "0 -8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03) inset",
-                    }}
-                  >
-                    {MODELS.map((m) => (
+                {/* Send/Close + Mic */}
+                <div className="flex justify-between items-center gap-1.5 mt-1">
+                  {/* Left: close button when expanded */}
+                  <div>
+                    {isExpanded && !isStreaming && (
                       <button
-                        key={m.id} type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => { setSelectedModel(m.id); setModelMenuOpen(false); inputRef.current?.focus(); }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-left transition-colors duration-150 hover:bg-white/[0.06]"
+                        onClick={() => { setIsExpanded(false); setActiveParagraph(null); setParagraphQuestions([]); clearTimers(); setBorderState("leaving"); timersRef.current.push(setTimeout(() => setBorderState("idle"), 500)); }}
+                        className="flex items-center gap-1 px-2 py-1.5 text-[10px] font-medium text-[#5C5C5C] rounded-lg transition-colors hover:text-[#999999] hover:bg-[rgba(255,255,255,0.04)]"
                       >
-                        <div className="flex flex-col">
-                          <span className="text-[11px] font-medium" style={{ color: selectedModel === m.id ? "#ffffff" : "rgba(255,255,255,0.7)" }}>{m.label}</span>
-                          <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.3)" }}>{m.desc}</span>
-                        </div>
-                        {selectedModel === m.id && (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(232, 220, 200, 0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="2 6 5 9 10 3" /></svg>
-                        )}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 15 12 9 18 15" />
+                        </svg>
+                        Collapse
                       </button>
-                    ))}
-                  </div>,
-                  document.body
-                )}
+                    )}
+                  </div>
 
-                <button
-                  onClick={() => handleSend()}
-                  disabled={isStreaming || !hasInput}
-                  className="flex-shrink-0 px-3.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
-                  style={{
-                    background: hasInput && !isStreaming ? "#F0EBE3" : isFocused ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)",
-                    color: hasInput && !isStreaming ? "#050505" : isFocused ? "rgba(255, 255, 255, 0.68)" : "rgba(255, 255, 255, 0.25)",
-                    border: hasInput && !isStreaming ? "1px solid #F0EBE3" : isFocused ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid rgba(255, 255, 255, 0.08)",
-                  }}
-                >
-                  {isStreaming ? "Thinking..." : "Ask"}
-                </button>
-              </div>
-            </div>
+                  <div className="flex items-center gap-1.5">
+                    {/* Mic button */}
+                    <button
+                      onClick={handleMicClick}
+                      disabled={isStreaming}
+                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
+                      style={{
+                        background: isFocused ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.04)",
+                        color: isFocused ? "rgba(255, 255, 255, 0.55)" : "rgba(255, 255, 255, 0.25)",
+                        border: isFocused ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(255, 255, 255, 0.06)",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="1" width="6" height="12" rx="3" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="23" />
+                        <line x1="8" y1="23" x2="16" y2="23" />
+                      </svg>
+                    </button>
+
+                    {/* Ask button */}
+                    <button
+                      onClick={() => handleSend()}
+                      disabled={isStreaming || !hasInput}
+                      className="flex-shrink-0 px-3.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
+                      style={{
+                        background: hasInput && !isStreaming ? "#F0EBE3" : isFocused ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)",
+                        color: hasInput && !isStreaming ? "#050505" : isFocused ? "rgba(255, 255, 255, 0.68)" : "rgba(255, 255, 255, 0.25)",
+                        border: hasInput && !isStreaming ? "1px solid #F0EBE3" : isFocused ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid rgba(255, 255, 255, 0.08)",
+                      }}
+                    >
+                      {isStreaming ? "Thinking..." : "Ask"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
