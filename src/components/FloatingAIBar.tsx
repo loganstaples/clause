@@ -236,8 +236,8 @@ export default function FloatingAIBar({
 
     const source = audioCtx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(analyser);
-    analyser.connect(audioCtx.destination);
+    source.connect(analyser);       // for waveform visualization
+    source.connect(audioCtx.destination); // for audio output (NOT through analyser)
 
     const startTime = Math.max(audioCtx.currentTime + 0.05, playbackTimeRef.current);
     source.start(startTime);
