@@ -8,6 +8,12 @@ Upload a contract and Clause scores how ready it is to sign, flags the clauses t
 
 **[▶ Watch the 3-minute demo](docs/media/clause-demo.mp4)** · Built solo in ~16 hours at a weekend hackathon (March 2026)
 
+
+
+https://github.com/user-attachments/assets/aaf9c01e-aabb-4d6f-be81-7fee92449d35
+
+
+
 <img src="docs/media/analysis.png" alt="Clause contract analysis view: a 28/100 favorability score, flagged clauses with plain-English explanations, and the contract with risky clauses highlighted" width="100%" />
 
 </div>
